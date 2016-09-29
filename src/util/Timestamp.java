@@ -1,4 +1,4 @@
-package Util;
+package util;
 
 import java.util.UUID;
 
@@ -8,12 +8,12 @@ public class Timestamp implements Comparable<Timestamp> {
   }
 
   @Override
-  public int compareTo(Timestamp t) {
-    if (t.time == this.time) {
-      return this.id.compareTo(t.id);
+  public int compareTo(Timestamp timestamp) {
+    if (timestamp.time == this.time) {
+      return this.id.compareTo(timestamp.id);
     }
 
-    if (this.time < t.time) {
+    if (this.time < timestamp.time) {
       return -1;
     }
 

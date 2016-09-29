@@ -1,0 +1,46 @@
+<project>
+    <path id="lib.path">
+        <fileset dir="lib" includes="**/*.jar" />
+    </path>
+
+    <taskdef resource="com/puppycrawl/tools/checkstyle/ant/checkstyle-ant-task.properties"
+             classpathref="lib.path"/>
+
+    <target name="style">
+        <checkstyle config="google_checks.xml">
+            <fileset dir="src" includes="**/*.java"/>
+            <formatter type="plain"/>
+            <formatter type="xml" tofile="checkstyle_report.xml"/>
+        </checkstyle>
+        <style in="checkstyle_report.xml" out="checkstyle_report.html" style="checkstyle-noframes-sorted.xsl"/>
+    </target>
+
+    <target name="clean">
+        <delete dir="out"/>
+    </target>
+
+    <target name="compile">
+        <mkdir dir="out/classes"/>
+        <javac srcdir="src" destdir="out/classes" classpathref="lib.path">
+        </javac>
+    </target>
+
+    <target name="jar" depends="compile">
+        <mkdir dir="out/jar"/>
+        <jar destfile="out/jar/Server.jar" basedir="out/classes">
+            <manifest>
+                <attribute name="Main-Class" value="server.Driver"/>
+            </manifest>
+        </jar>
+    </target>
+
+    <target name="run" depends="jar">
+        <java fork="true" classname="server.Driver">
+            <classpath>
+                <path refid="lib.path"/>
+                <path location="out/jar/Server.jar"/>
+            </classpath>
+        </java>
+    </target>
+
+</project>
