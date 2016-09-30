@@ -1,0 +1,42 @@
+Most of the work done so far has been the MitterServer. 
+
+To run a stand alone MitterServer, run
+
+> ant run
+
+To run all the unit tests, plus a "SillyTest", run
+
+> ant test
+
+The "SillyTest" isn't a real test. It was used to verify the 
+interactions between the MitterServer, a single NotificationServer 
+and a single Client. Some assertions are made. However the final "test" 
+isn't even a test. If the following is outputted, then the test was 
+"successful"
+
+> Message: Sometimes things happen
+> Sender: me!
+> Location: my house
+> Severity: NOTICE
+> Time: 11:16 18/01/70
+
+Where success is a notification can be retrieved by a subscribed client.
+
+The HttpClient is not intended as a stand alone client. It's also not 
+just a client, it can also act as a NotificationServer. It is not 
+intended to retrieve notification at certain intervals.
+
+It is designed to be used within another client, for example GuiClient 
+or FileClient. Similarly, CommandLineNotifier. These classes should have 
+a task.
+
+The notification store isn't currently written to file. As part of this 
+todo, a MitterServer will be able to read a file into the 
+NotificationStore.
+
+Similarly for the ClientStore.
+
+There's something wrong with the (real-time) timestamp.
+
+I believe the Lamport clocks are functioning as expected, but I haven't 
+tried multiple clients yet.
