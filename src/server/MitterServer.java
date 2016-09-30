@@ -2,18 +2,20 @@ package server;
 
 import com.google.gson.Gson;
 
-import com.sun.jmx.snmp.Timestamp;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
+import util.CreatedNotification;
 import util.LamportClock;
 import util.Notification;
 import util.NotificationStore;
+import util.Registration;
 import util.RetrievalResult;
 import util.Severity;
+import util.SubscriptionResult;
 
 
 import java.io.BufferedReader;
@@ -28,7 +30,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-class MitterServer {
+public class MitterServer {
   /**
    * Use an existing HttpServer.
    * @param httpServer the server to use
@@ -110,8 +112,7 @@ class MitterServer {
       clock.send();
       OutputStream responseBody = httpExchange.getResponseBody();
       OutputStreamWriter responseWriter = new OutputStreamWriter(responseBody);
-      gson.toJson(newNotification, responseWriter);
-      gson.toJson(clock.getTime(), responseWriter);
+      gson.toJson(new CreatedNotification(clock.getTime(), newNotification), responseWriter);
       responseWriter.close();
     }
   }
@@ -160,8 +161,10 @@ class MitterServer {
       httpExchange.sendResponseHeaders(200, 0);
       OutputStream responseBody = httpExchange.getResponseBody();
       OutputStreamWriter responseWriter = new OutputStreamWriter(responseBody);
-      gson.toJson(clientStore.getSubscriptions(subscriber), responseWriter);
-      gson.toJson(clock.getTime(), responseWriter);
+
+      gson.toJson(new SubscriptionResult(clientStore.getSubscriptions(subscriber),
+                                         clock.getTime()),
+                  responseWriter);
       responseWriter.close();
     }
   }
@@ -230,13 +233,13 @@ class MitterServer {
 
       clock.send();
       clientStore.setLastAccess(id, clock.getTime());
+      result.timestamp = clock.getTime();
 
       httpExchange.sendResponseHeaders(200, 0);
       OutputStream responseBody = httpExchange.getResponseBody();
 
       OutputStreamWriter responseWriter = new OutputStreamWriter(responseBody);
       gson.toJson(result, responseWriter);
-      gson.toJson(clock.getTime(), responseWriter);
 
       responseWriter.close();
     }
@@ -270,8 +273,9 @@ class MitterServer {
       OutputStreamWriter responseWriter = new OutputStreamWriter(responseBody);
 
       clock.send();
-      responseWriter.write(clock.getTime().toString());
-      responseWriter.write(UUID.randomUUID().toString());
+      Registration registration = new Registration(clock.getTime(), UUID.randomUUID());
+      gson.toJson(registration, responseWriter);
+
       responseWriter.close();
     }
   }

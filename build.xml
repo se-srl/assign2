@@ -15,31 +15,104 @@
         <style in="checkstyle_report.xml" out="checkstyle_report.html" style="checkstyle-noframes-sorted.xsl"/>
     </target>
 
+    <taskdef classpathref="lib.path" resource="tasks.properties" />
+
+    <taskdef name="junit"
+             classpathref="lib.path"
+             classname="org.apache.tools.ant.taskdefs.optional.junit.JUnitTask" />
+
+
+    <target name="test" depends="compile">
+        <mkdir dir="reports/junit_xml" />
+        <mkdir dir="reports/junit_html" />
+
+        <junit fork="yes" dir="." printsummary="yes">
+            <!-- Order must be instrumented classes, normal classes, cobertuba path -->
+            <classpath location="out/instrumented" />
+            <classpath location="out/main" />
+            <classpath refid="lib.path" />
+
+            <formatter type="xml" />
+            <batchtest todir="reports/junit_xml">
+                <fileset dir="test">
+                    <include name="**/*Test.java" />
+                </fileset>
+            </batchtest>
+        </junit>
+
+        <junitreport todir="reports/junit_xml">
+            <fileset dir="reports/junit_xml">
+                <include name="TEST-*.xml" />
+            </fileset>
+            <report format="frames" todir="reports/junit_html" />
+        </junitreport>
+    </target>
+
+
+    <target name="instrument" depends="compile">
+        <!-- Remove the coverage data file and any old instrumentation. -->
+        <delete file="cobertura.ser"/>
+        <delete dir="out/instrumented" />
+
+        <mkdir dir="out/instrumented" />
+        <cobertura-instrument todir="out/instrumented">
+            <fileset dir="out/main">
+                <!-- Instrument all the application classes, but don't instrument the test classes. -->
+                <include name="**/*.class" />
+                <exclude name="**/*Test.class" />
+                </fileset>
+        </cobertura-instrument>
+    </target>
+
+    <!-- Generate an XML file containing the coverage data using the "srcdir" attribute. -->
+    <target name="coverage-report">
+        <mkdir dir="reports/coverage_xml" />
+        <cobertura-report srcdir="src" destdir="reports/coverage_xml" format="xml" />
+    </target>
+
+    <!-- Generate an summary XML file containing the coverage data using the "srcdir" attribute. -->
+    <target name="summary-coverage-report">
+        <mkdir dir="reports/coverage_summary_xml" />
+        <cobertura-report srcdir="src" destdir="reports/coverage_summary_xml" format="summaryXml" />
+    </target>
+
+    <!-- Generate a series of HTML files containing the coverage data in a user-readable form using nested source filesets. -->
+    <target name="alternate-coverage-report">
+        <mkdir dir="reports/coverage_html" />
+        <cobertura-report destdir="reports/coverage_html">
+            <fileset dir="src">
+                <include name="**/*.java"/>
+            </fileset>
+        </cobertura-report>
+    </target>
+
+    <target name="coverage"
+            depends="compile,instrument,test,coverage-report,summary-coverage-report,alternate-coverage-report"/>
+
     <target name="clean">
         <delete dir="out"/>
     </target>
 
-    <target name="compile">
-        <mkdir dir="out/classes"/>
-        <javac srcdir="src" destdir="out/classes" classpathref="lib.path">
+    <!-- Compile the java code from ${src.main.dir} to ${build.main.dir}  -->
+    <target name="compile" depends="clean">
+        <mkdir dir="out/main" />
+        <javac
+                destdir="out/main"
+                encoding="UTF-8"
+                source="8"
+                target="8"
+                includeAntRuntime="false"
+                debug="yes">
+            <src path="src"/>
+            <src path="test"/>
+            <classpath refid="lib.path" />
         </javac>
     </target>
 
-    <target name="jar" depends="compile">
-        <mkdir dir="out/jar"/>
-        <jar destfile="out/jar/Server.jar" basedir="out/classes">
-            <manifest>
-                <attribute name="Main-Class" value="server.Driver"/>
-            </manifest>
-        </jar>
-    </target>
-
-    <target name="run" depends="jar">
+    <target name="run" depends="compile">
         <java fork="true" classname="server.Driver">
-            <classpath>
-                <path refid="lib.path"/>
-                <path location="out/jar/Server.jar"/>
-            </classpath>
+            <classpath refid="lib.path" />
+            <classpath location="out/main" />
         </java>
     </target>
 

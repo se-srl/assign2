@@ -4,6 +4,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -86,8 +90,28 @@ public class NotificationStore {
     return relevantNotifications;
   }
 
+  public void scheduleSaves() {
+    final Runnable saver = () -> {
+      // Do saving things. Only save things that haven't been saved before. This will probably
+      // involve appending the JSON of each notification since the last write.
+
+      // Then do cleaning things. Be careful.
+    };
+
+    scheduler.scheduleAtFixedRate(saver, writeInterval, writeInterval, TimeUnit.SECONDS);
+  }
+
+  protected File getFile() {
+    return file;
+  }
+
+  protected int getWriteInterval() {
+    return writeInterval;
+  }
+
   private int writeInterval;
   private File file;
+  private Timestamp lastWrite;
   /*
    * It may seem strange to store the notifications by their severity, as whenever a user
    * requires notifications, they always search by the notification creator. However, a regular
@@ -95,4 +119,6 @@ public class NotificationStore {
    * severity.
    */
   private LinkedHashMap<Severity, ArrayList<Notification>> notifications = new LinkedHashMap<>();
+
+  private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 }
