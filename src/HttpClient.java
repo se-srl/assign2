@@ -13,7 +13,12 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import util.CreatedNotification;
 import util.LamportClock;
@@ -34,34 +39,43 @@ import util.Timestamp;
 public class HttpClient {
   public HttpClient(String requestRoot) {
     this.requestRoot = requestRoot;
+    this.executor = Executors.newCachedThreadPool();
   }
 
-  public void register() throws IOException {
+  public Future<UUID> register() throws IOException {
     clock.send();
-    String result = Request.Get(requestRoot + "/register").execute().returnContent()
-                         .asString();
+    Request request = Request.Get(requestRoot + "/register");
 
-    Registration registration = gson.fromJson(result, Registration.class);
 
-    clock.receive(registration.timestamp);
-    id = registration.id;
+    return executor.submit(() -> {
+      String result = request.execute().returnContent().asString();
+      Registration registration = gson.fromJson(result, Registration.class);
+
+      clock.receive(registration.timestamp);
+      id = registration.id;
+      return registration.id;
+    });
   }
 
-  public void sendNotification(Notification notification) throws IOException {
+  public Future<Notification> sendNotification(Notification notification) throws IOException {
     notification.logicalTimestamp = clock.getTime();
     notification.senderId = id;
 
     clock.send();
-    String result = Request.Post(requestRoot + "/send")
-                           .bodyString(gson.toJson(notification), ContentType.APPLICATION_JSON)
-                           .execute().returnContent().asString();
 
-    CreatedNotification created = gson.fromJson(result, CreatedNotification.class);
-    clock.receive(created.time);
-    sentStore.add(created.notification);
+    Request request =  Request.Post(requestRoot + "/send").bodyString(gson.toJson(notification),
+      ContentType.APPLICATION_JSON);
+
+    return executor.submit(() -> {
+      String result = request.execute().returnContent().asString();
+
+      CreatedNotification created = gson.fromJson(result, CreatedNotification.class);
+      clock.receive(created.time);
+      return created.notification;
+    });
   }
 
-  public void subscribe(UUID subscription) throws URISyntaxException, IOException {
+  public Future<List<UUID>> subscribe(UUID subscription) throws URISyntaxException, IOException {
     clock.send();
 
     URIBuilder builder = new URIBuilder(new URI(requestRoot + "/subscribe"));
@@ -69,14 +83,18 @@ public class HttpClient {
     builder.setParameter("subscription", subscription.toString());
     builder.setParameter("time", Integer.toString(clock.getTime().getTime()));
 
-    String resultStr = Request.Get(builder.build()).execute().returnContent().asString();
+    Request request = Request.Get(builder.build());
 
-    SubscriptionResult result = gson.fromJson(resultStr, SubscriptionResult.class);
-    clock.receive(result.timestamp);
-    subscriptions = result.subscriptions;
+    return executor.submit(() ->{
+      String resultStr = request.execute().returnContent().asString();
+      SubscriptionResult result = gson.fromJson(resultStr, SubscriptionResult.class);
+      clock.receive(result.timestamp);
+
+      return result.subscriptions;
+    });
   }
 
-  public void retrieve(String severity) throws URISyntaxException, IOException {
+  public Future<List<Notification>> retrieve(String severity) throws URISyntaxException, IOException {
     clock.send();
 
     URIBuilder builder = new URIBuilder(new URI(requestRoot + "/retrieve"));
@@ -84,31 +102,28 @@ public class HttpClient {
     builder.setParameter("severity", severity);
     builder.setParameter("time", Integer.toString(clock.getTime().getTime()));
 
-    String result = Request.Get(builder.build()).execute().returnContent().asString();
-    RetrievalResult retrieved = gson.fromJson(result, RetrievalResult.class);
+    Request request = Request.Get(builder.build());
 
-    clock.receive(retrieved.timestamp);
+    return executor.submit(() -> {
+      String resultStr = request.execute().returnContent().asString();
+      RetrievalResult retrieved = gson.fromJson(resultStr, RetrievalResult.class);
 
-    for (Notification notification : retrieved.notifications) {
-      System.out.print(notification.toString());
-    }
+      clock.receive(retrieved.timestamp);
+
+      return retrieved.notifications;
+    });
   }
 
   public UUID getId() {
     return id;
   }
 
-  /**
-   * A collection of notifications that have been sent by this client. Obviously, the ID will
-   * always be the same for each notification.
-   */
-  public NotificationStore sentStore = new NotificationStore();
-  public ArrayList<UUID> subscriptions = new ArrayList<>();
-
   private Gson gson = new Gson();
   private UUID id;
 
   private String requestRoot;
+
+  private ExecutorService executor;
 
   private LamportClock clock = new LamportClock();
 }
