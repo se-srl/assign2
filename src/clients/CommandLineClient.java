@@ -3,6 +3,7 @@ package clients;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.List;
+import java.util.Scanner;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -42,6 +43,25 @@ public class CommandLineClient {
     throw new TimeoutException("Server didn't respond in time.");
   }
 
+  public boolean subscribe(String subscribee) {
+    try {
+      Future<List<UUID>> futureSubscriptions = httpClient.subscribe(UUID.fromString(subscribee));
+      for (int i = 0; i < retries; i++) {
+        if (futureSubscriptions.get().contains(UUID.fromString(subscribee))) {
+          System.out.println("Subscribed!");
+          return true;
+        } else {
+          System.err.println("Server failed to subscribe. Try again.");
+          return false;
+        }
+      }
+    } catch (InterruptedException | URISyntaxException | ExecutionException | IOException e) {
+      System.err.println("Failed to send request. Try again.");
+      return false;
+    }
+    return false;
+  }
+
   public void register() throws TimeoutException, IOException {
     Future<UUID> success = null;
 
@@ -72,13 +92,28 @@ public class CommandLineClient {
       System.exit(1);
     }
 
+    Scanner input = new Scanner(System.in);
     System.out.println("Client ready to go.");
 
+    while(input.hasNextLine()) {
+      String line = input.nextLine();
+      String[] components = line.split(" ");
+      switch (components[0]) {
+        case "subscribe":
+          client.subscribe(components[1]);
+          break;
+        default:
+          System.out.println("Not sure what you mean. Try " + possibleInputs);
+      }
+    }
 
     // Schedule tasks to receive notifications with "notice" severity.
     scheduler.scheduleAtFixedRate(() -> {
       try {
-        client.getNotifications("notice");
+        List<Notification> retrieved =  client.getNotifications("notice");
+        for (Notification notification : retrieved) {
+          System.out.println(notification.toString());
+        }
       } catch (IOException e) {
         e.printStackTrace();
       } catch (URISyntaxException e) {
@@ -91,7 +126,10 @@ public class CommandLineClient {
     // Schedule tasks to receive notifications with "caution" severity.
     scheduler.scheduleAtFixedRate(() -> {
       try {
-        client.getNotifications("caution");
+        List<Notification> retrieved = client.getNotifications("caution");
+        for (Notification notification : retrieved) {
+          System.out.println(notification.toString());
+        }
       } catch (IOException e) {
         e.printStackTrace();
       } catch (URISyntaxException e) {
@@ -102,6 +140,7 @@ public class CommandLineClient {
     }, 0, 1, TimeUnit.MINUTES);
   }
 
+  static String possibleInputs = "subscribe";
   int timeout;
   int retries;
   HttpClient httpClient;
