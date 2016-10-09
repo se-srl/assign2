@@ -2,7 +2,9 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.concurrent.ExecutionException;
 
+import clients.HttpClient;
 import server.MitterServer;
 import util.Notification;
 import util.Severity;
@@ -14,21 +16,20 @@ import static org.junit.Assert.assertThat;
 
 public class SillyTest {
   @Test
-  public void doSomeThings() throws IOException, URISyntaxException {
+  public void doSomeThings() throws IOException, URISyntaxException, ExecutionException, InterruptedException {
     Thread server = new Thread(new MitterServerRunnable());
     server.start();
 
     HttpClient notificationServer = new HttpClient("http://" + hostname + ":" + mitterPort);
-    notificationServer.register();
+    notificationServer.register().get();
     assertNotNull(notificationServer.getId());
 
     HttpClient client = new HttpClient("http://" + hostname + ":" + mitterPort);
-    client.register();
+    client.register().get();
 
     // Subscribe the client to the notification server, and assert that the subscription has been
     // stored (implying it was received correctly by the mitter server)
-    client.subscribe(notificationServer.getId());
-    assertThat(client.subscriptions, hasItem(notificationServer.getId()));
+    assertThat(client.subscribe(notificationServer.getId()).get(), hasItem(notificationServer.getId()));
 
     // Create a notification to send.
     Notification notification = new Notification();
@@ -38,12 +39,11 @@ public class SillyTest {
     notification.message = "Sometimes, things happen";
     notification.timestamp = 1475211772;
 
-    notificationServer.sendNotification(notification);
+    Notification received = notificationServer.sendNotification(notification).get();
 
     // Assert that the sent notification is now stored properly.
-    Notification stored = notificationServer.sentStore.get(Severity.NOTICE, notificationServer.getId(), null).get(0);
-    assertEquals("me!", stored.sender);
-    assertEquals("my house", stored.location);
+    assertEquals("me!", received.sender);
+    assertEquals("my house", received.location);
     assertEquals("Sometimes, things happen", notification.message);
     assertEquals(1475211772, notification.timestamp);
 

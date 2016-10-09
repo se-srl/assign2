@@ -1,3 +1,5 @@
+package clients;
+
 import com.google.gson.Gson;
 
 import org.apache.http.HttpResponse;
@@ -51,8 +53,8 @@ public class HttpClient {
       String result = request.execute().returnContent().asString();
       Registration registration = gson.fromJson(result, Registration.class);
 
-      clock.receive(registration.timestamp);
-      id = registration.id;
+      this.clock.receive(registration.timestamp);
+      this.id = registration.id;
       return registration.id;
     });
   }

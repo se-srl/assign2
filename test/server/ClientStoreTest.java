@@ -5,6 +5,7 @@ import org.junit.Test;
 import java.util.UUID;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.core.IsCollectionContaining.hasItem;
 
 public class ClientStoreTest {
@@ -16,5 +17,11 @@ public class ClientStoreTest {
     store.add(client, notifier);
 
     assertThat(store.getSubscriptions(client), hasItem(notifier));
+  }
+
+  @Test
+  public void returnsEmptySetForNoSubscriptions() {
+    ClientStore store = new ClientStore();
+    assertThat(store.getSubscriptions(UUID.randomUUID()), empty());
   }
 }

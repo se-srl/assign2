@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.core.IsCollectionContaining.hasItems;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -34,6 +35,12 @@ public class NotificationStoreTest {
     ArrayList<Notification> result = store.get(Severity.CAUTION, UUID.fromString(uuid),
                                                new Timestamp(2));
     assertThat(result, hasItem(notification));
+  }
+
+  @Test
+  public void EmptySubscriptionReturnsEmptyResult() {
+    NotificationStore store = new NotificationStore();
+    assertThat(store.get(Severity.CAUTION, new ArrayList<UUID>(), new Timestamp(2)), empty());
   }
 
   @Test

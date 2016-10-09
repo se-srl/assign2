@@ -109,11 +109,21 @@
         </javac>
     </target>
 
-    <target name="run" depends="compile">
+    <target name="run-mitter" depends="compile">
         <java fork="true" classname="server.Driver">
             <classpath refid="lib.path" />
             <classpath location="out/main" />
+            <arg value="${port}"/>
         </java>
     </target>
 
+    <target name="run-client" depends="compile">
+        <java fork="true" classname="clients.CommandLineClient">
+            <classpath refid="lib.path"/>
+            <classpath location="out/main"/>
+            <arg value="${serverRoot}"/>
+            <arg value="${timeout}"/>
+            <arg value="${retries}"/>
+        </java>
+    </target>
 </project>

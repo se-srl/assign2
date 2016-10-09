@@ -22,7 +22,7 @@ isn't even a test. If the following is outputted, then the test was
 
 Where success is a notification can be retrieved by a subscribed client.
 
-The HttpClient is not intended as a stand alone client. It's also not 
+The clients.HttpClient is not intended as a stand alone client. It's also not
 just a client, it can also act as a NotificationServer. It is not 
 intended to retrieve notification at certain intervals.
 

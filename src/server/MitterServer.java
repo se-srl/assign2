@@ -295,16 +295,6 @@ public class MitterServer {
     }
   }
 
-  public static void main(String[] args) {
-    try {
-      MitterServer server = new MitterServer(args[1], Integer.parseInt(args[2]));
-      server.init();
-      server.start();
-    } catch (IOException e) {
-      System.err.println("Problem with server. Try again.");
-    }
-  }
-
   private LamportClock clock;
   private Gson gson = new Gson();
   private HttpServer server;

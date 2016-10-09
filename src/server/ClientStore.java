@@ -41,7 +41,12 @@ public class ClientStore {
    * @return a list of IDs of the notification servers.
    */
   public ArrayList<UUID> getSubscriptions(UUID subscriber) {
-    return subscriptions.get(subscriber);
+    if (subscriptions.containsKey(subscriber)) {
+      return subscriptions.get(subscriber);
+    } else {
+      // Override the default behaviour.
+      return new ArrayList<>();
+    }
   }
 
   /**
