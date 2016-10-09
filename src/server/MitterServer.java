@@ -1,6 +1,7 @@
 package server;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -28,6 +29,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class MitterServer {
@@ -36,7 +38,8 @@ public class MitterServer {
    * @param httpServer the server to use
    */
   public MitterServer(HttpServer httpServer) {
-    this.server = httpServer;
+    server = httpServer;
+    server.setExecutor(Executors.newCachedThreadPool());
     clientStore = new ClientStore();
     notificationStore = new NotificationStore();
     clock = new LamportClock();
@@ -50,7 +53,6 @@ public class MitterServer {
   public MitterServer(String hostname, int port) throws IOException {
     // The HttpServer constructor takes an address, and a maximum backlog. If this is < 0, the
     // default is used.
-    // TODO Use an executor with multiple threads, so that concurrent requests can be processed.
     this(HttpServer.create(new InetSocketAddress(hostname, port), -1));
   }
 
@@ -104,7 +106,20 @@ public class MitterServer {
     public void handle(HttpExchange httpExchange) throws IOException {
       InputStream requestBody = httpExchange.getRequestBody();
       String jsonString = readToString(requestBody);
-      Notification newNotification = gson.fromJson(jsonString, Notification.class);
+      Notification newNotification;
+      try {
+         newNotification = gson.fromJson(jsonString, Notification.class);
+      } catch (JsonSyntaxException jsonSyntax) {
+        httpExchange.sendResponseHeaders(400, 0);
+        OutputStream responseBody = httpExchange.getResponseBody();
+        OutputStreamWriter responseWriter = new OutputStreamWriter(responseBody);
+        gson.toJson(jsonSyntax, responseWriter);
+        responseWriter.close();
+        // We don't wish to continue processing the request once we've alerted the client that
+        // it's malformed.
+        return;
+      }
+
       clock.receive(newNotification.logicalTimestamp);
       notificationStore.add(newNotification);
 
@@ -277,6 +292,16 @@ public class MitterServer {
       gson.toJson(registration, responseWriter);
 
       responseWriter.close();
+    }
+  }
+
+  public static void main(String[] args) {
+    try {
+      MitterServer server = new MitterServer(args[1], Integer.parseInt(args[2]));
+      server.init();
+      server.start();
+    } catch (IOException e) {
+      System.err.println("Problem with server. Try again.");
     }
   }
 

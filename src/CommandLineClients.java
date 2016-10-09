@@ -19,7 +19,7 @@ public class CommandLineClients {
         return futureNotifications.get(timeout, TimeUnit.MILLISECONDS);
       } catch (InterruptedException | ExecutionException | TimeoutException exception) {
         futureNotifications.cancel(true);
-        futureNotifications = httpClient.retrieve("caution")
+        futureNotifications = httpClient.retrieve("caution");
       }
     }
 
