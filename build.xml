@@ -113,7 +113,8 @@
         <java fork="true" classname="server.Driver">
             <classpath refid="lib.path" />
             <classpath location="out/main" />
-            <arg value="${port}"/>
+            <arg value="${fetchPort}"/>
+            <arg value="${broadcastPort}"/>
         </java>
     </target>
 
@@ -121,9 +122,23 @@
         <java fork="true" classname="clients.CommandLineClient">
             <classpath refid="lib.path"/>
             <classpath location="out/main"/>
-            <arg value="${serverRoot}"/>
-            <arg value="${timeout}"/>
+            <arg value="${hostname}"/>
+            <arg value="${fetchPort}"/>
+            <arg value="${broadcastPort}"/>
             <arg value="${retries}"/>
+            <arg value="${timeout}"/>
+        </java>
+    </target>
+
+    <target name="run-notification-server" depends="compile">
+        <java fork="true" classname="clients.CommandLineNotificationServer">
+            <classpath refid="lib.path"/>
+            <classpath location="out/main"/>
+            <arg value="${hostname}"/>
+            <arg value="${fetchPort}"/>
+            <arg value="${broadcastPort}"/>
+            <arg value="${retries}"/>
+            <arg value="${timeout}"/>
         </java>
     </target>
 </project>

@@ -1,6 +1,7 @@
 package clients;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Scanner;
@@ -14,15 +15,24 @@ import java.util.concurrent.TimeoutException;
 
 import util.Notification;
 
-public class CommandLineClient {
+public class CommandLineClient implements UrgentBroadcastListener {
   public CommandLineClient(HttpClient httpClient, int retries, int timeout) {
     this.httpClient = httpClient;
     this.retries = retries;
     this.timeout = timeout;
+
+    httpClient.addListener(this);
   }
 
-  public CommandLineClient(String requestRoot, int retries, int timeout) {
-    this(new HttpClient(requestRoot), retries, timeout);
+  public CommandLineClient(String hostname, int serverPort, int multicastPort, int retries, int
+    timeout) throws IOException {
+    this(new HttpClient(hostname, serverPort, multicastPort), retries, timeout);
+  }
+
+  @Override
+  public void urgentNotificationReceived(Notification notification) {
+    System.out.println("URGENT NOTIFICATION RECEIVED:");
+    System.out.println(notification.toString());
   }
 
   public List<Notification> getNotifications(String severity)
@@ -82,7 +92,7 @@ public class CommandLineClient {
 
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
     CommandLineClient client = new CommandLineClient(args[0], Integer.parseInt(args[1]), Integer
-      .parseInt(args[2]));
+      .parseInt(args[2]), Integer.parseInt(args[3]), Integer.parseInt(args[4]));
     ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     try {
@@ -94,6 +104,44 @@ public class CommandLineClient {
 
     Scanner input = new Scanner(System.in);
     System.out.println("Client ready to go.");
+    System.out.println("UUID is " + client.getId());
+
+    client.startListening();
+
+    // Schedule tasks to receive notifications with "notice" severity.
+    scheduler.scheduleAtFixedRate(() -> {
+      try {
+        System.out.println("Requesting notice notifications");
+        List<Notification> retrieved =  client.getNotifications("notice");
+        for (Notification notification : retrieved) {
+          System.out.println(notification.toString());
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
+      } catch (URISyntaxException e) {
+        e.printStackTrace();
+      } catch (TimeoutException e) {
+        e.printStackTrace();
+      }
+    }, 0, 5, TimeUnit.SECONDS);
+
+
+    // Schedule tasks to receive notifications with "caution" severity.
+    scheduler.scheduleWithFixedDelay(() -> {
+      try {
+        System.out.println("Requesting caution notifications:");
+        List<Notification> retrieved = client.getNotifications("caution");
+        for (Notification notification : retrieved) {
+          System.out.println(notification.toString());
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
+      } catch (URISyntaxException e) {
+        e.printStackTrace();
+      } catch (TimeoutException e) {
+        e.printStackTrace();
+      }
+    }, 0, 1, TimeUnit.SECONDS);
 
     while(input.hasNextLine()) {
       String line = input.nextLine();
@@ -107,41 +155,19 @@ public class CommandLineClient {
       }
     }
 
-    // Schedule tasks to receive notifications with "notice" severity.
-    scheduler.scheduleAtFixedRate(() -> {
-      try {
-        List<Notification> retrieved =  client.getNotifications("notice");
-        for (Notification notification : retrieved) {
-          System.out.println(notification.toString());
-        }
-      } catch (IOException e) {
-        e.printStackTrace();
-      } catch (URISyntaxException e) {
-        e.printStackTrace();
-      } catch (TimeoutException e) {
-        e.printStackTrace();
-      }
-    }, 0, 30, TimeUnit.MINUTES);
+  }
 
-    // Schedule tasks to receive notifications with "caution" severity.
-    scheduler.scheduleAtFixedRate(() -> {
-      try {
-        List<Notification> retrieved = client.getNotifications("caution");
-        for (Notification notification : retrieved) {
-          System.out.println(notification.toString());
-        }
-      } catch (IOException e) {
-        e.printStackTrace();
-      } catch (URISyntaxException e) {
-        e.printStackTrace();
-      } catch (TimeoutException e) {
-        e.printStackTrace();
-      }
-    }, 0, 1, TimeUnit.MINUTES);
+  private void startListening() throws IOException {
+    httpClient.startListeningToBroadcast();
+  }
+
+  private String getId() {
+    return httpClient.getId().toString();
   }
 
   static String possibleInputs = "subscribe";
   int timeout;
   int retries;
+
   HttpClient httpClient;
 }

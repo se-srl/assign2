@@ -25,7 +25,12 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.MulticastSocket;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -35,25 +40,28 @@ import java.util.stream.Collectors;
 public class MitterServer {
   /**
    * Use an existing HttpServer.
-   * @param httpServer the server to use
+   * @param httpServer the server to us
    */
-  public MitterServer(HttpServer httpServer) {
+  public MitterServer(HttpServer httpServer, MulticastSocket multicastSocket) {
     server = httpServer;
     server.setExecutor(Executors.newCachedThreadPool());
     clientStore = new ClientStore();
     notificationStore = new NotificationStore();
     clock = new LamportClock();
+    multicast = multicastSocket;
   }
 
   /**
    * Creates a HttpServer bound to the InetSocketAddress with the hostname and port specified.
    * @param hostname the hostname for the server
-   * @param port the port for the server
+   * @param serverPort the port for the server
    */
-  public MitterServer(String hostname, int port) throws IOException {
+  public MitterServer(String hostname, int serverPort, int multicastPort) throws IOException {
     // The HttpServer constructor takes an address, and a maximum backlog. If this is < 0, the
     // default is used.
-    this(HttpServer.create(new InetSocketAddress(hostname, port), -1));
+
+    this(HttpServer.create(new InetSocketAddress(hostname, serverPort), -1),
+         new MulticastSocket(new InetSocketAddress(hostname, serverPort)));
   }
 
   /**
@@ -83,6 +91,16 @@ public class MitterServer {
                                                             .collect(Collectors.joining("\n"));
   }
 
+  private void broadcast(String notification) {
+    byte[] message = notification.getBytes();
+    DatagramPacket packet = new DatagramPacket(message, message.length, server.getAddress());
+    try {
+      multicast.send(packet);
+    } catch (IOException e) {
+      System.err.println("Had trouble connecting. Try again.");
+    }
+  }
+
   /**
    * Handles requests from notification servers to send notifications to clients.
    *
@@ -108,7 +126,7 @@ public class MitterServer {
       String jsonString = readToString(requestBody);
       Notification newNotification;
       try {
-         newNotification = gson.fromJson(jsonString, Notification.class);
+        newNotification = gson.fromJson(jsonString, Notification.class);
       } catch (JsonSyntaxException jsonSyntax) {
         httpExchange.sendResponseHeaders(400, 0);
         OutputStream responseBody = httpExchange.getResponseBody();
@@ -119,9 +137,14 @@ public class MitterServer {
         // it's malformed.
         return;
       }
+      System.out.println(newNotification.senderId.toString());
 
       clock.receive(newNotification.logicalTimestamp);
       notificationStore.add(newNotification);
+
+      if (newNotification.severity == Severity.URGENT) {
+        broadcast(jsonString);
+      }
 
       httpExchange.sendResponseHeaders(201, 0);
       clock.send();
@@ -295,6 +318,7 @@ public class MitterServer {
     }
   }
 
+  DatagramSocket multicast;
   private LamportClock clock;
   private Gson gson = new Gson();
   private HttpServer server;

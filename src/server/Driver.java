@@ -8,9 +8,10 @@ public class Driver {
    * @param args the port number to use
    */
   public static void main(String[] args) {
-    int port = Integer.parseInt(args[0]);
+    int fetchPort = Integer.parseInt(args[0]);
+    int broadcastPort = Integer.parseInt(args[1]);
     try {
-      MitterServer server = new MitterServer("localhost", port);
+      MitterServer server = new MitterServer("localhost", fetchPort, broadcastPort);
       server.init();
       server.start();
       System.out.println("Server started successfully");

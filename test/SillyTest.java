@@ -2,6 +2,8 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import clients.HttpClient;
@@ -20,11 +22,11 @@ public class SillyTest {
     Thread server = new Thread(new MitterServerRunnable());
     server.start();
 
-    HttpClient notificationServer = new HttpClient("http://" + hostname + ":" + mitterPort);
+    HttpClient notificationServer = new HttpClient(hostname, mitterPort, broadcastPort);
     notificationServer.register().get();
     assertNotNull(notificationServer.getId());
 
-    HttpClient client = new HttpClient("http://" + hostname + ":" + mitterPort);
+    HttpClient client = new HttpClient(hostname, mitterPort, broadcastPort);
     client.register().get();
 
     // Subscribe the client to the notification server, and assert that the subscription has been
@@ -48,14 +50,17 @@ public class SillyTest {
     assertEquals(1475211772, notification.timestamp);
 
     // See if the client receives the notification. If they have, then it should show in the output.
-    client.retrieve("notice");
+    List<Notification> returnedToClient = client.retrieve("notice").get();
+    for (Notification n : returnedToClient) {
+      System.out.print(n.toString());
+    }
   }
 
   public class MitterServerRunnable implements Runnable {
     @Override
     public void run() {
       try {
-        MitterServer server = new MitterServer(hostname, mitterPort);
+        MitterServer server = new MitterServer(hostname, mitterPort, broadcastPort);
         server.init();
         server.start();
       } catch (IOException e) {
@@ -66,4 +71,5 @@ public class SillyTest {
 
   private String hostname = "localhost";
   private int mitterPort = 8080;
+  private int broadcastPort = 9090;
 }

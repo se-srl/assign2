@@ -12,6 +12,9 @@ import org.apache.http.entity.ContentType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.DatagramPacket;
+import java.net.InetSocketAddress;
+import java.net.MulticastSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -21,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.jar.Pack200;
 
 import util.CreatedNotification;
 import util.LamportClock;
@@ -39,15 +43,16 @@ import util.Timestamp;
  * receivers. Nor does this client. It is intended to be used within other classes.
  */
 public class HttpClient {
-  public HttpClient(String requestRoot) {
-    this.requestRoot = requestRoot;
+  public HttpClient(String hostname, int serverPort, int multicastPort) throws IOException {
+    this.requestRoot = "http://" + hostname + ":" + Integer.toString(serverPort);
     this.executor = Executors.newCachedThreadPool();
+    this.listeners = new ArrayList<>();
+    multicastSocket = new MulticastSocket(new InetSocketAddress(hostname, multicastPort));
   }
 
   public Future<UUID> register() throws IOException {
     clock.send();
     Request request = Request.Get(requestRoot + "/register");
-
 
     return executor.submit(() -> {
       String result = request.execute().returnContent().asString();
@@ -57,6 +62,10 @@ public class HttpClient {
       this.id = registration.id;
       return registration.id;
     });
+  }
+
+  public void addListener(UrgentBroadcastListener listener) {
+    listeners.add(listener);
   }
 
   public Future<Notification> sendNotification(Notification notification) throws IOException {
@@ -116,16 +125,34 @@ public class HttpClient {
     });
   }
 
+  public void startListeningToBroadcast() throws IOException {
+    executor.submit(() -> {
+      multicastSocket.joinGroup(multicastSocket.getInetAddress());
+
+      while (true) {
+        // 1500 is the MTU.
+        byte[] buffer = new byte[1500];
+        DatagramPacket packet = new DatagramPacket(buffer, 1500);
+        multicastSocket.receive(packet);
+
+        String jsonString = new String(packet.getData());
+        Notification notification = gson.fromJson(jsonString, Notification.class);
+        for (UrgentBroadcastListener listener : listeners) {
+          listener.urgentNotificationReceived(notification);
+        }
+      }
+    });
+  }
+
   public UUID getId() {
     return id;
   }
 
   private Gson gson = new Gson();
   private UUID id;
-
   private String requestRoot;
-
+  private MulticastSocket multicastSocket;
   private ExecutorService executor;
-
   private LamportClock clock = new LamportClock();
+  private ArrayList<UrgentBroadcastListener> listeners;
 }

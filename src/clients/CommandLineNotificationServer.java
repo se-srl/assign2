@@ -22,13 +22,16 @@ public class CommandLineNotificationServer {
     this.httpClient = httpClient;
     this.retries = retries;
     this.timeout = timeout;
+
+    System.out.println("Timeout: " + timeout);
   }
 
-  public CommandLineNotificationServer(String requestRoot, int retries, int timeout) {
-    this(new HttpClient(requestRoot), retries, timeout);
+  public CommandLineNotificationServer(String hostname, int serverPort, int multicastPort, int
+    retries, int timeout) throws IOException {
+    this(new HttpClient(hostname, serverPort, multicastPort), retries, timeout);
   }
 
-  public void send() {
+  public void send() throws InterruptedException, ExecutionException, TimeoutException, IOException {
     Scanner input = new Scanner(System.in);
     Notification notification = new Notification();
     notification.timestamp = System.currentTimeMillis();
@@ -46,11 +49,12 @@ public class CommandLineNotificationServer {
       }
     }
 
+
     try {
       Future<Notification> created = httpClient.sendNotification(notification);
       for (int i = 0; i < retries; i++) {
         try {
-          if (created.get(timeout, TimeUnit.MILLISECONDS) != null) {
+            if (created.get(timeout, TimeUnit.MILLISECONDS) != null) {
             System.out.println("Successfully sent");
             return;
           }
@@ -91,10 +95,16 @@ public class CommandLineNotificationServer {
     this.senderName = senderName;
   }
 
+  private String getId() {
+    return httpClient.getId().toString();
+  }
+
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
     CommandLineNotificationServer client = new CommandLineNotificationServer(args[0],
                                                   Integer.parseInt(args[1]),
-                                                  Integer.parseInt(args[2]));
+                                                  Integer.parseInt(args[2]),
+                                                  Integer.parseInt(args[3]),
+                                                  Integer.parseInt(args[4]));
     client.register();
 
     Scanner input = new Scanner(System.in);
@@ -103,6 +113,7 @@ public class CommandLineNotificationServer {
     client.setName(input.nextLine());
 
     System.out.println("Ready to go.");
+    System.out.println(client.getId());
     System.out.print("> ");
 
     while(input.hasNextLine()) {
@@ -110,7 +121,12 @@ public class CommandLineNotificationServer {
       ArrayList<String> components = new ArrayList<>(Arrays.asList(line.split(" ")));
       switch (components.get(0)) {
         case "send":
-          client.send();
+          try {
+            client.send();
+          } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException();
+          }
           break;
         default:
           System.out.println("Not sure what you mean. Try " + possibleInputs);
