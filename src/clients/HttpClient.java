@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.DatagramPacket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
 import java.net.URI;
@@ -47,7 +48,8 @@ public class HttpClient {
     this.requestRoot = "http://" + hostname + ":" + Integer.toString(serverPort);
     this.executor = Executors.newCachedThreadPool();
     this.listeners = new ArrayList<>();
-    multicastSocket = new MulticastSocket(new InetSocketAddress(hostname, multicastPort));
+    this.multicastSocket = new MulticastSocket(multicastPort);
+    multicastSocket.joinGroup(InetAddress.getByName("224.4.4.4"));
   }
 
   public Future<UUID> register() throws IOException {
@@ -108,6 +110,8 @@ public class HttpClient {
   public Future<List<Notification>> retrieve(String severity) throws URISyntaxException, IOException {
     clock.send();
 
+    System.out.println("Sending request");
+
     URIBuilder builder = new URIBuilder(new URI(requestRoot + "/retrieve"));
     builder.setParameter("id", id.toString());
     builder.setParameter("severity", severity);
@@ -127,15 +131,13 @@ public class HttpClient {
 
   public void startListeningToBroadcast() throws IOException {
     executor.submit(() -> {
-      multicastSocket.joinGroup(multicastSocket.getInetAddress());
-
       while (true) {
         // 1500 is the MTU.
         byte[] buffer = new byte[1500];
         DatagramPacket packet = new DatagramPacket(buffer, 1500);
         multicastSocket.receive(packet);
+        String jsonString = new String(buffer, 0, packet.getLength());
 
-        String jsonString = new String(packet.getData());
         Notification notification = gson.fromJson(jsonString, Notification.class);
         for (UrgentBroadcastListener listener : listeners) {
           listener.urgentNotificationReceived(notification);

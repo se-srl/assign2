@@ -15,6 +15,8 @@ public class ClientStore {
    * @param subscription the ID of the notification server to subscribe to
    */
   public void add(UUID subscriber, UUID subscription) {
+    System.out.println("Subscribing " + subscriber + " to " + subscription);
+
     if (!subscriptions.containsKey(subscriber)) {
       subscriptions.put(subscriber, new ArrayList<>());
     }
@@ -55,7 +57,11 @@ public class ClientStore {
    * @return a Timestamp recorded at the time of the last access.
    */
   public Timestamp getLastAccess(UUID subscriber) {
-    return lastAccess.get(subscriber);
+    Timestamp time = lastAccess.get(subscriber);
+//    if (time.getTime() == -1) {
+//      return null;
+//    }
+    return time;
   }
 
   public void setLastAccess(UUID subscriber, Timestamp timestamp) {

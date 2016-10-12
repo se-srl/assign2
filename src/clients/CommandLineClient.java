@@ -3,6 +3,7 @@ package clients;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
@@ -109,31 +110,29 @@ public class CommandLineClient implements UrgentBroadcastListener {
     client.startListening();
 
     // Schedule tasks to receive notifications with "notice" severity.
-    scheduler.scheduleAtFixedRate(() -> {
-      try {
-        System.out.println("Requesting notice notifications");
-        List<Notification> retrieved =  client.getNotifications("notice");
-        for (Notification notification : retrieved) {
-          System.out.println(notification.toString());
-        }
-      } catch (IOException e) {
-        e.printStackTrace();
-      } catch (URISyntaxException e) {
-        e.printStackTrace();
-      } catch (TimeoutException e) {
-        e.printStackTrace();
-      }
-    }, 0, 5, TimeUnit.SECONDS);
+    // scheduler.scheduleAtFixedRate(() -> {
+    //   try {
+    //     List<Notification> retrieved =  client.getNotifications("notice");
+
+    //     System.out.println("NOTIFICATIONS RECEIVED");
+    //     retrieved.forEach(System.out::println);
+    //   } catch (IOException e) {
+    //     e.printStackTrace();
+    //   } catch (URISyntaxException e) {
+    //     e.printStackTrace();
+    //   } catch (TimeoutException e) {
+    //     e.printStackTrace();
+    //   }
+    // }, 20, 20, TimeUnit.SECONDS);
 
 
     // Schedule tasks to receive notifications with "caution" severity.
-    scheduler.scheduleWithFixedDelay(() -> {
+/*    scheduler.scheduleWithFixedDelay(() -> {
       try {
-        System.out.println("Requesting caution notifications:");
         List<Notification> retrieved = client.getNotifications("caution");
-        for (Notification notification : retrieved) {
-          System.out.println(notification.toString());
-        }
+
+        System.out.println("NOTIFICATIONS RECEIVED");
+        retrieved.forEach(System.out::println);
       } catch (IOException e) {
         e.printStackTrace();
       } catch (URISyntaxException e) {
@@ -141,14 +140,18 @@ public class CommandLineClient implements UrgentBroadcastListener {
       } catch (TimeoutException e) {
         e.printStackTrace();
       }
-    }, 0, 1, TimeUnit.SECONDS);
-
+    }, 15, 15, TimeUnit.SECONDS);
+*/
     while(input.hasNextLine()) {
       String line = input.nextLine();
       String[] components = line.split(" ");
       switch (components[0]) {
         case "subscribe":
           client.subscribe(components[1]);
+          break;
+        case "retrieve":
+          List<Notification> notifications = client.getNotifications(components[1]);
+          System.out.println(notifications);
           break;
         default:
           System.out.println("Not sure what you mean. Try " + possibleInputs);

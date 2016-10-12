@@ -1,5 +1,7 @@
 package util;
 
+import static java.lang.Math.max;
+
 /**
  * An implementation of a Lamport clock.
  *
@@ -16,8 +18,9 @@ public class LamportClock {
    * @param timestamp the timestamp sent by the other process
    */
   public void receive(Timestamp timestamp) {
-    currentTime = new Timestamp((currentTime.compareTo(timestamp) == 1 ? currentTime.getTime() :
-                                                                          timestamp.getTime()) + 1);
+    currentTime = new Timestamp(max(currentTime.getTime(), timestamp.getTime()));
+//    currentTime = new Timestamp((currentTime.compareTo(timestamp) == 1 ? currentTime.getTime() :
+//                                                                          timestamp.getTime()) + 1);
   }
 
   /**

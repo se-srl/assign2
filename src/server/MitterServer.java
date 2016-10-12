@@ -42,13 +42,17 @@ public class MitterServer {
    * Use an existing HttpServer.
    * @param httpServer the server to us
    */
-  public MitterServer(HttpServer httpServer, MulticastSocket multicastSocket) {
+  public MitterServer(HttpServer httpServer, MulticastSocket multicastSocket, InetAddress
+                                                                              broadcastGroup) throws IOException {
     server = httpServer;
     server.setExecutor(Executors.newCachedThreadPool());
     clientStore = new ClientStore();
     notificationStore = new NotificationStore();
     clock = new LamportClock();
     multicast = multicastSocket;
+    this.broadcastGroup = broadcastGroup;
+    this.multicastPort = multicastSocket.getLocalPort();
+    multicast.joinGroup(InetAddress.getByName("224.4.4.4"));
   }
 
   /**
@@ -61,7 +65,7 @@ public class MitterServer {
     // default is used.
 
     this(HttpServer.create(new InetSocketAddress(hostname, serverPort), -1),
-         new MulticastSocket(new InetSocketAddress(hostname, serverPort)));
+         new MulticastSocket(multicastPort), InetAddress.getByName("224.4.4.4"));
   }
 
   /**
@@ -93,9 +97,11 @@ public class MitterServer {
 
   private void broadcast(String notification) {
     byte[] message = notification.getBytes();
-    DatagramPacket packet = new DatagramPacket(message, message.length, server.getAddress());
+    DatagramPacket packet = new DatagramPacket(message, message.length, broadcastGroup, multicastPort);
     try {
       multicast.send(packet);
+      System.out.println("Broadcast a notification of size " + packet.getLength());
+      System.out.println(message);
     } catch (IOException e) {
       System.err.println("Had trouble connecting. Try again.");
     }
@@ -137,9 +143,10 @@ public class MitterServer {
         // it's malformed.
         return;
       }
-      System.out.println(newNotification.senderId.toString());
+      System.out.println(newNotification.toString());
 
       clock.receive(newNotification.logicalTimestamp);
+      newNotification.logicalTimestamp = clock.getTime();
       notificationStore.add(newNotification);
 
       if (newNotification.severity == Severity.URGENT) {
@@ -192,6 +199,8 @@ public class MitterServer {
       UUID subscriber = UUID.fromString(rawId);
       ArrayList<UUID> subscriptions = rawSubscriptions.stream().map(UUID::fromString)
                                         .collect(Collectors.toCollection(ArrayList::new));
+
+      System.out.println("Subscribed " + subscriber + " to " + subscriptions);
 
       clientStore.addAll(subscriber, subscriptions);
 
@@ -259,15 +268,20 @@ public class MitterServer {
           }
         } else if (param.getName().equals("time")) {
           time = Integer.parseInt(param.getValue());
+        } else if (param.getName().equals("since")) {
+          time = Integer.parseInt(param.getValue());
         }
       }
 
       clock.receive(new util.Timestamp(time));
 
+      System.out.println("Requested notifications for " + id + ", with severity " + severity);
+
       RetrievalResult result = new RetrievalResult();
-        result.notifications = notificationStore.get(severity,
-                                                   clientStore.getSubscriptions(id),
-                                                   clientStore.getLastAccess(id));
+      result.notifications = notificationStore.get(severity,
+                                                 clientStore.getSubscriptions(id),
+                                                 clientStore.getLastAccess(id));
+//                                                 null);
 
       clock.send();
       clientStore.setLastAccess(id, clock.getTime());
@@ -318,7 +332,10 @@ public class MitterServer {
     }
   }
 
-  DatagramSocket multicast;
+  MulticastSocket multicast;
+  private InetAddress broadcastGroup;
+  private int multicastPort;
+
   private LamportClock clock;
   private Gson gson = new Gson();
   private HttpServer server;
