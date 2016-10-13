@@ -1,7 +1,12 @@
 package util;
 
+import com.google.gson.Gson;
+
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -22,9 +27,9 @@ public class NotificationStore {
    * later.
    */
   public NotificationStore() {
-    notifications.put(Severity.CAUTION, new ArrayList<>());
-    notifications.put(Severity.NOTICE, new ArrayList<>());
-    notifications.put(Severity.URGENT, new ArrayList<>());
+    notifications.put(Severity.NOTICE, new ExpiringLinkedHashMap<>(100));
+    notifications.put(Severity.CAUTION, new ExpiringLinkedHashMap<>(500));
+    notifications.put(Severity.URGENT, new ExpiringLinkedHashMap<>(1000));
   }
 
   /**
@@ -52,7 +57,7 @@ public class NotificationStore {
    * @param notification the notification to add
    */
   public void add(util.Notification notification) {
-    notifications.get(notification.severity).add(notification);
+    notifications.get(notification.severity).put(notification.id, notification);
   }
 
   /**
@@ -64,7 +69,7 @@ public class NotificationStore {
    * @return a list of notifications matching the requirements
    */
   public ArrayList<Notification> get(Severity severity, UUID subscription, Timestamp since) {
-    return new ArrayList<>(notifications.get(severity).stream()
+    return new ArrayList<>(notifications.get(severity).values().stream()
                                .filter(note -> note.senderId.equals(subscription))
                                .filter(note -> since == null ||
                                                note.logicalTimestamp.compareTo(since) == 1)
@@ -94,8 +99,13 @@ public class NotificationStore {
     final Runnable saver = () -> {
       // Do saving things. Only save things that haven't been saved before. This will probably
       // involve appending the JSON of each notification since the last write.
+      try {
+        FileWriter fw = new FileWriter(file);
+        gson.toJson(notifications, fw);
+      } catch (IOException e) {
+        // Don't stress too much, it will be written over in writeInterval seconds anyway.
+      }
 
-      // Then do cleaning things. Be careful.
     };
 
     scheduler.scheduleAtFixedRate(saver, writeInterval, writeInterval, TimeUnit.SECONDS);
@@ -109,6 +119,7 @@ public class NotificationStore {
     return writeInterval;
   }
 
+  private Gson gson;
   private int writeInterval;
   private File file;
   private Timestamp lastWrite;
@@ -118,7 +129,8 @@ public class NotificationStore {
    * task that occurs involves removing notifications when there are too many. This is done by
    * severity.
    */
-  private LinkedHashMap<Severity, ArrayList<Notification>> notifications = new LinkedHashMap<>();
+  private HashMap<Severity, ExpiringLinkedHashMap<UUID, Notification>> notifications =
+    new HashMap<>();
 
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 }

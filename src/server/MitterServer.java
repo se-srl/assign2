@@ -55,6 +55,8 @@ public class MitterServer {
     multicast.joinGroup(InetAddress.getByName("224.4.4.4"));
   }
 
+  public MitterServer(C)
+
   /**
    * Creates a HttpServer bound to the InetSocketAddress with the hostname and port specified.
    * @param hostname the hostname for the server
@@ -76,6 +78,8 @@ public class MitterServer {
     server.createContext("/subscribe", new SubscribeHandler());
     server.createContext("/send", new SendHandler());
     server.createContext("/register", new RegisterHandler());
+
+    notificationStore.scheduleSaves();
   }
 
   /**
