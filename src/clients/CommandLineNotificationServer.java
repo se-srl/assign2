@@ -16,6 +16,7 @@ import java.util.concurrent.TimeoutException;
 
 import util.Config;
 import util.Notification;
+import util.Retrier;
 import util.Severity;
 
 public class CommandLineNotificationServer {
@@ -51,7 +52,7 @@ public class CommandLineNotificationServer {
       Future<Notification> created = httpClient.sendNotification(notification);
       for (int i = 0; i < config.getRetries(); i++) {
         try {
-            if (created.get(config.getTimeout(), TimeUnit.MILLISECONDS) != null) {
+          if (created.get(config.getTimeout(), TimeUnit.MILLISECONDS) != null) {
             System.out.println("Successfully sent");
             return;
           }

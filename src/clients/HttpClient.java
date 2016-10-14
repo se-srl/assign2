@@ -2,19 +2,13 @@ package clients;
 
 import com.google.gson.Gson;
 
-import org.apache.http.HttpResponse;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.fluent.Request;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.ContentType;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -24,19 +18,14 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.jar.Pack200;
 
 import util.Config;
 import util.CreatedNotification;
 import util.LamportClock;
 import util.Notification;
-import util.NotificationStore;
 import util.Registration;
 import util.RetrievalResult;
-import util.Severity;
 import util.SubscriptionResult;
-import util.Timestamp;
 
 /**
  * A client for a MitterServer.
@@ -52,6 +41,14 @@ public class HttpClient {
     this.listeners = new ArrayList<>();
     this.multicastSocket = new MulticastSocket(config.getBroadcastPort());
     multicastSocket.joinGroup(InetAddress.getByName(config.getBroadcastHostname()));
+  }
+
+  void setExecutor(ExecutorService exectuor) {
+    this.executor = exectuor;
+  }
+
+  void setClock(LamportClock clock) {
+    this.clock = clock;
   }
 
   public Future<UUID> register() throws IOException {
