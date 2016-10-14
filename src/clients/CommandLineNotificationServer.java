@@ -1,16 +1,15 @@
 package clients;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -29,7 +28,44 @@ public class CommandLineNotificationServer {
     this.config = config;
   }
 
-  public void send() throws InterruptedException, ExecutionException, TimeoutException, IOException {
+  class SendTask implements Callable<Notification> {
+    SendTask(Future<Notification> future, Notification notification) {
+      this.future = future;
+      this.notification = notification;
+    }
+
+    @Override
+    public Notification call() throws Exception {
+      future = httpClient.sendNotification(notification);
+      Notification returned = future.get(config.getTimeout(), TimeUnit.MILLISECONDS);
+      if (notification != null) {
+        System.out.println("Successfully sent");
+        return returned;
+      }
+      throw new Exception();
+    }
+
+    Future<Notification> future;
+    Notification notification;
+  }
+
+  private class SendFail implements Callable<Void> {
+    SendFail(Future<Notification> future, Notification notification) {
+      this.future = future;
+      this.notification = notification;
+    }
+
+    @Override
+    public Void call() throws Exception {
+      future.cancel(true);
+      return null;
+    }
+
+    Future<Notification> future;
+    Notification notification;
+  }
+
+  private Notification createNotification(InputStream in) {
     Scanner input = new Scanner(System.in);
     Notification notification = new Notification();
     notification.timestamp = System.currentTimeMillis();
@@ -47,44 +83,56 @@ public class CommandLineNotificationServer {
       }
     }
 
+    return notification;
+  }
+
+  public void send(Notification notification) throws InterruptedException, ExecutionException,
+                                         TimeoutException, IOException {
+    Future<Notification> created = null;
 
     try {
-      Future<Notification> created = httpClient.sendNotification(notification);
-      for (int i = 0; i < config.getRetries(); i++) {
-        try {
-          if (created.get(config.getTimeout(), TimeUnit.MILLISECONDS) != null) {
-            System.out.println("Successfully sent");
-            return;
-          }
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
-          created.cancel(true);
-          created = httpClient.sendNotification(notification);
-        }
-      }
-      throw new TimeoutException("Failed to connect after retrying.");
-    } catch (IOException | TimeoutException e) {
+      Retrier.doWithRetries(new SendTask(created, notification), new SendFail(created,notification), config.getRetries());
+    } catch (TimeoutException e) {
       System.out.println("Server problem, try again.");
     }
+  }
+
+  private class RegisterTask implements Callable<Void> {
+    RegisterTask(Future<UUID> future) {
+      this.future = future;
+    }
+
+    @Override
+    public Void call() throws Exception {
+      future = httpClient.register();
+      future.get(config.getTimeout(), TimeUnit.MILLISECONDS);
+
+      return null;
+    }
+
+    Future<UUID> future;
+  }
+
+  private class RegisterFail implements Callable<Void> {
+    RegisterFail(Future<UUID> future) {
+      this.future = future;
+    }
+
+    @Override
+    public Void call() throws Exception {
+      future.cancel(true);
+      return null;
+    }
+
+    Future<UUID> future;
   }
 
   public void register() {
     Future<UUID> success = null;
 
     try {
-      for (int i = 0; i < config.getRetries(); i++) {
-        try {
-          success = httpClient.register();
-          success.get(config.getTimeout(), TimeUnit.MILLISECONDS);
-          return;
-        } catch (InterruptedException | ExecutionException | TimeoutException exception) {
-          success.cancel(true);
-          success = httpClient.register();
-        }
-      }
-
-      throw new TimeoutException("Server didn't respond in time. Try again.");
-    } catch(IOException | TimeoutException exception) {
-      success.cancel(true);
+      Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), config.getRetries());
+    } catch (TimeoutException e) {
       System.err.println("Server problem, try again.");
     }
   }
@@ -116,7 +164,8 @@ public class CommandLineNotificationServer {
       switch (components.get(0)) {
         case "send":
           try {
-            client.send();
+            Notification notification = client.createNotification(System.in);
+            client.send(notification);
           } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException();
