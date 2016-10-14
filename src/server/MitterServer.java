@@ -9,6 +9,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
+import util.Config;
 import util.CreatedNotification;
 import util.LamportClock;
 import util.Notification;
@@ -26,11 +27,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -42,12 +41,13 @@ public class MitterServer {
    * Use an existing HttpServer.
    * @param httpServer the server to us
    */
-  public MitterServer(HttpServer httpServer, MulticastSocket multicastSocket, InetAddress
+  public MitterServer(Config config, HttpServer httpServer, MulticastSocket multicastSocket,
+                      InetAddress
                                                                               broadcastGroup) throws IOException {
     server = httpServer;
     server.setExecutor(Executors.newCachedThreadPool());
-    clientStore = new ClientStore();
-    notificationStore = new NotificationStore();
+    clientStore = new ClientStore(config);
+    notificationStore = new NotificationStore(config);
     clock = new LamportClock();
     multicast = multicastSocket;
     this.broadcastGroup = broadcastGroup;
@@ -55,19 +55,11 @@ public class MitterServer {
     multicast.joinGroup(InetAddress.getByName("224.4.4.4"));
   }
 
-  public MitterServer(C)
-
-  /**
-   * Creates a HttpServer bound to the InetSocketAddress with the hostname and port specified.
-   * @param hostname the hostname for the server
-   * @param serverPort the port for the server
-   */
-  public MitterServer(String hostname, int serverPort, int multicastPort) throws IOException {
-    // The HttpServer constructor takes an address, and a maximum backlog. If this is < 0, the
-    // default is used.
-
-    this(HttpServer.create(new InetSocketAddress(hostname, serverPort), -1),
-         new MulticastSocket(multicastPort), InetAddress.getByName("224.4.4.4"));
+  public MitterServer(Config config) throws IOException {
+    this(config, HttpServer.create(
+      new InetSocketAddress(config.getFetchHostname(), config.getFetchPort()), -1),
+      new MulticastSocket(config.getBroadcastPort()),
+                          InetAddress.getByName(config.getBroadcastHostname()));
   }
 
   /**
@@ -104,8 +96,6 @@ public class MitterServer {
     DatagramPacket packet = new DatagramPacket(message, message.length, broadcastGroup, multicastPort);
     try {
       multicast.send(packet);
-      System.out.println("Broadcast a notification of size " + packet.getLength());
-      System.out.println(message);
     } catch (IOException e) {
       System.err.println("Had trouble connecting. Try again.");
     }
@@ -147,7 +137,6 @@ public class MitterServer {
         // it's malformed.
         return;
       }
-      System.out.println(newNotification.toString());
 
       clock.receive(newNotification.logicalTimestamp);
       newNotification.logicalTimestamp = clock.getTime();

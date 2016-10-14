@@ -16,7 +16,7 @@ public class ClientStoreTest {
   public void retrievesSubscriptions() {
     UUID client = UUID.fromString("875a2867-2e9a-43ad-acc9-0085a50aba45");
     UUID notifier = UUID.fromString("4651c03e-76e5-4dbf-b2a6-0e196997ad8d");
-    ClientStore store = new ClientStore();
+    ClientStore store = new ClientStore(config, file);
     store.add(client, notifier);
 
     assertThat(store.getSubscriptions(client), hasItem(notifier));
@@ -24,7 +24,7 @@ public class ClientStoreTest {
 
   @Test
   public void returnsEmptySetForNoSubscriptions() {
-    ClientStore store = new ClientStore();
+    ClientStore store = new ClientStore(config, file);
     assertThat(store.getSubscriptions(UUID.randomUUID()), empty());
   }
 
@@ -33,7 +33,7 @@ public class ClientStoreTest {
     UUID client = UUID.randomUUID();
     UUID notifier = UUID.randomUUID();
 
-    ClientStore store = new ClientStore();
+    ClientStore store = new ClientStore(config, file);
     store.add(client, notifier);
 
     assertThat(store.getSubscriptions(client), hasItem(notifier));
@@ -45,7 +45,7 @@ public class ClientStoreTest {
     UUID notifier1 = UUID.randomUUID();
     UUID notifier2 = UUID.randomUUID();
 
-    ClientStore store = new ClientStore();
+    ClientStore store = new ClientStore(config, file);
     store.addAll(client, new ArrayList<>(Arrays.asList(notifier1, notifier2)));
     assertThat(store.getSubscriptions(client), hasItems(notifier1, notifier2));
   }

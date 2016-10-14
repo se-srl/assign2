@@ -3,6 +3,8 @@ package util;
 import com.google.gson.Gson;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -26,34 +28,36 @@ public class NotificationStore {
    * Creates an empty store, which is not automatically written to file, unless a file is added
    * later.
    */
-  public NotificationStore() {
-    notifications.put(Severity.NOTICE, new ExpiringLinkedHashMap<>(100));
-    notifications.put(Severity.CAUTION, new ExpiringLinkedHashMap<>(500));
-    notifications.put(Severity.URGENT, new ExpiringLinkedHashMap<>(1000));
-  }
+  public NotificationStore(Config config) {
+    this(new File(config.getNotificationSaveFile()), config);
 
-  /**
-   * Creates an empty store, which is automatically written to the given file at the given interval.
-   * @param fileName the name of the file to be written to
-   * @param writeInterval the duration of time between file writes, given in seconds.
-   */
-  NotificationStore(String fileName, int writeInterval) {
-    this(new File(fileName), writeInterval);
+    notifications.put(Severity.NOTICE, new ExpiringLinkedHashMap<>(config.getNoticeMax()));
+    notifications.put(Severity.CAUTION, new ExpiringLinkedHashMap<>(config.getCautionMax()));
+    notifications.put(Severity.URGENT, new ExpiringLinkedHashMap<>(config.getUrgentMax()));
   }
 
   /**
    * Creates an empty store which is automatically written to the given file at the given interval.
    * @param file the file to be written to
-   * @param writeInterval the duration of the time between file writes, given in seconds
    */
-  NotificationStore(File file, int writeInterval) {
-    this();
+  NotificationStore(File file, Config config) {
     this.file = file;
-    this.writeInterval = writeInterval;
+    this.config = config;
+
+    gson = new Gson();
+  }
+
+  public void load(String filename) throws FileNotFoundException {
+    file = new File(filename);
+    FileReader fr = new FileReader(file);
+    notifications = gson.fromJson(fr, notifications.getClass());
   }
 
   /**
    * Adds a notification to the store.
+   *
+   * It implicitly rewrites any notifications in existence. This is okay, assuming that only one
+   * process is sending requests for any given identifier.
    * @param notification the notification to add
    */
   public void add(util.Notification notification) {
@@ -108,21 +112,17 @@ public class NotificationStore {
 
     };
 
-    scheduler.scheduleAtFixedRate(saver, writeInterval, writeInterval, TimeUnit.SECONDS);
+    scheduler.scheduleAtFixedRate(saver, config.getSaveInterval(), config.getSaveInterval(), TimeUnit.SECONDS);
   }
 
   protected File getFile() {
     return file;
   }
 
-  protected int getWriteInterval() {
-    return writeInterval;
-  }
-
+  private Config config;
   private Gson gson;
-  private int writeInterval;
   private File file;
-  private Timestamp lastWrite;
+
   /*
    * It may seem strange to store the notifications by their severity, as whenever a user
    * requires notifications, they always search by the notification creator. However, a regular

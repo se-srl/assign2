@@ -27,6 +27,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.jar.Pack200;
 
+import util.Config;
 import util.CreatedNotification;
 import util.LamportClock;
 import util.Notification;
@@ -44,12 +45,13 @@ import util.Timestamp;
  * receivers. Nor does this client. It is intended to be used within other classes.
  */
 public class HttpClient {
-  public HttpClient(String hostname, int serverPort, int multicastPort) throws IOException {
-    this.requestRoot = "http://" + hostname + ":" + Integer.toString(serverPort);
+  public HttpClient(Config config) throws IOException {
+    this.config = config;
+    this.requestRoot = "http://" + config.getFetchHostname() + ":" + Integer.toString(config.getFetchPort());
     this.executor = Executors.newCachedThreadPool();
     this.listeners = new ArrayList<>();
-    this.multicastSocket = new MulticastSocket(multicastPort);
-    multicastSocket.joinGroup(InetAddress.getByName("224.4.4.4"));
+    this.multicastSocket = new MulticastSocket(config.getBroadcastPort());
+    multicastSocket.joinGroup(InetAddress.getByName(config.getBroadcastHostname()));
   }
 
   public Future<UUID> register() throws IOException {
@@ -133,8 +135,8 @@ public class HttpClient {
     executor.submit(() -> {
       while (true) {
         // 1500 is the MTU.
-        byte[] buffer = new byte[1500];
-        DatagramPacket packet = new DatagramPacket(buffer, 1500);
+        byte[] buffer = new byte[config.getMTU()];
+        DatagramPacket packet = new DatagramPacket(buffer, config.getMTU());
         multicastSocket.receive(packet);
         String jsonString = new String(buffer, 0, packet.getLength());
 
@@ -150,6 +152,7 @@ public class HttpClient {
     return id;
   }
 
+  private Config config;
   private Gson gson = new Gson();
   private UUID id;
   private String requestRoot;

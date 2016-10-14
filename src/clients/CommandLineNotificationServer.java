@@ -14,21 +14,18 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import util.Config;
 import util.Notification;
 import util.Severity;
 
 public class CommandLineNotificationServer {
-  public CommandLineNotificationServer(HttpClient httpClient, int retries, int timeout) {
-    this.httpClient = httpClient;
-    this.retries = retries;
-    this.timeout = timeout;
-
-    System.out.println("Timeout: " + timeout);
+  CommandLineNotificationServer(Config config) throws IOException {
+    this(new HttpClient(config), config);
   }
 
-  public CommandLineNotificationServer(String hostname, int serverPort, int multicastPort, int
-    retries, int timeout) throws IOException {
-    this(new HttpClient(hostname, serverPort, multicastPort), retries, timeout);
+  public CommandLineNotificationServer(HttpClient httpClient, Config config) {
+    this.httpClient = httpClient;
+    this.config = config;
   }
 
   public void send() throws InterruptedException, ExecutionException, TimeoutException, IOException {
@@ -52,9 +49,9 @@ public class CommandLineNotificationServer {
 
     try {
       Future<Notification> created = httpClient.sendNotification(notification);
-      for (int i = 0; i < retries; i++) {
+      for (int i = 0; i < config.getRetries(); i++) {
         try {
-            if (created.get(timeout, TimeUnit.MILLISECONDS) != null) {
+            if (created.get(config.getTimeout(), TimeUnit.MILLISECONDS) != null) {
             System.out.println("Successfully sent");
             return;
           }
@@ -73,10 +70,10 @@ public class CommandLineNotificationServer {
     Future<UUID> success = null;
 
     try {
-      for (int i = 0; i < retries; i++) {
+      for (int i = 0; i < config.getRetries(); i++) {
         try {
           success = httpClient.register();
-          success.get(timeout, TimeUnit.MILLISECONDS);
+          success.get(config.getTimeout(), TimeUnit.MILLISECONDS);
           return;
         } catch (InterruptedException | ExecutionException | TimeoutException exception) {
           success.cancel(true);
@@ -100,11 +97,7 @@ public class CommandLineNotificationServer {
   }
 
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
-    CommandLineNotificationServer client = new CommandLineNotificationServer(args[0],
-                                                  Integer.parseInt(args[1]),
-                                                  Integer.parseInt(args[2]),
-                                                  Integer.parseInt(args[3]),
-                                                  Integer.parseInt(args[4]));
+    CommandLineNotificationServer client = new CommandLineNotificationServer(new Config(args[0]));
     client.register();
 
     Scanner input = new Scanner(System.in);
@@ -137,8 +130,7 @@ public class CommandLineNotificationServer {
   }
 
   private static String possibleInputs = "send";
-  private int timeout;
-  private int retries;
+  private Config config;
   private String senderName;
   private HttpClient httpClient;
 }

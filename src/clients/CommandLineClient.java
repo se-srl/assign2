@@ -1,9 +1,7 @@
 package clients;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
@@ -14,20 +12,18 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import util.Config;
 import util.Notification;
 
 public class CommandLineClient implements UrgentBroadcastListener {
-  public CommandLineClient(HttpClient httpClient, int retries, int timeout) {
-    this.httpClient = httpClient;
-    this.retries = retries;
-    this.timeout = timeout;
-
-    httpClient.addListener(this);
+  public CommandLineClient(Config config) throws IOException {
+    this(new HttpClient(config), config);
   }
 
-  public CommandLineClient(String hostname, int serverPort, int multicastPort, int retries, int
-    timeout) throws IOException {
-    this(new HttpClient(hostname, serverPort, multicastPort), retries, timeout);
+  public CommandLineClient(HttpClient httpClient, Config config) {
+    this.httpClient = httpClient;
+    this.config = config;
+    httpClient.addListener(this);
   }
 
   @Override
@@ -41,9 +37,9 @@ public class CommandLineClient implements UrgentBroadcastListener {
     // TODO handle the IO Exceptions and URISyntaxException (Also fix main).
     Future<List<Notification>> futureNotifications = httpClient.retrieve(severity);
 
-    for (int i = 0; i < retries; i++) {
+    for (int i = 0; i < config.getRetries(); i++) {
       try {
-        return futureNotifications.get(timeout, TimeUnit.MILLISECONDS);
+        return futureNotifications.get(config.getTimeout(), TimeUnit.MILLISECONDS);
       } catch (InterruptedException | ExecutionException | TimeoutException exception) {
         futureNotifications.cancel(true);
         futureNotifications = httpClient.retrieve(severity);
@@ -54,32 +50,41 @@ public class CommandLineClient implements UrgentBroadcastListener {
     throw new TimeoutException("Server didn't respond in time.");
   }
 
-  public boolean subscribe(String subscribee) {
-    try {
-      Future<List<UUID>> futureSubscriptions = httpClient.subscribe(UUID.fromString(subscribee));
-      for (int i = 0; i < retries; i++) {
-        if (futureSubscriptions.get().contains(UUID.fromString(subscribee))) {
+  public boolean subscribe(String subscribee) throws TimeoutException {
+    Future<List<UUID>> futureSubscriptions = null;
+
+
+    for (int i = 0; i < config.getRetries(); i++) {
+      try {
+        futureSubscriptions = httpClient.subscribe(UUID.fromString(subscribee));
+        if (futureSubscriptions.get(config.getTimeout(), TimeUnit.MILLISECONDS).contains(UUID.fromString
+                                                                                              (subscribee))) {
           System.out.println("Subscribed!");
           return true;
-        } else {
-          System.err.println("Server failed to subscribe. Try again.");
-          return false;
         }
+      } catch (InterruptedException | ExecutionException | TimeoutException e) {
+        futureSubscriptions.cancel(true);
+        // It seems like there are unhandled exceptions here, but it will have been caught the
+        // first time the request was sent, and handled below.
+        try {
+          futureSubscriptions = httpClient.subscribe(UUID.fromString(subscribee));
+        } catch (URISyntaxException | IOException e1) {
+          // Do nothing, because this will literally never happen.
+        }
+      } catch (IOException | URISyntaxException e) {
+        throw new RuntimeException("Unexpected error. Try again");
       }
-    } catch (InterruptedException | URISyntaxException | ExecutionException | IOException e) {
-      System.err.println("Failed to send request. Try again.");
-      return false;
     }
-    return false;
+    throw new TimeoutException("Server didn't respond in time, try again.");
   }
 
   public void register() throws TimeoutException, IOException {
     Future<UUID> success = null;
 
-    for (int i = 0; i < retries; i++) {
+    for (int i = 0; i < config.getRetries(); i++) {
       try {
         success = httpClient.register();
-        success.get(timeout, TimeUnit.MILLISECONDS);
+        success.get(config.getTimeout(), TimeUnit.MILLISECONDS);
         return;
       } catch (InterruptedException | ExecutionException | TimeoutException exception) {
         success.cancel(true);
@@ -92,9 +97,7 @@ public class CommandLineClient implements UrgentBroadcastListener {
   }
 
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
-    CommandLineClient client = new CommandLineClient(args[0], Integer.parseInt(args[1]), Integer
-      .parseInt(args[2]), Integer.parseInt(args[3]), Integer.parseInt(args[4]));
-    ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    CommandLineClient client = new CommandLineClient(new Config(args[0]));
 
     try {
       client.register();
@@ -109,39 +112,6 @@ public class CommandLineClient implements UrgentBroadcastListener {
 
     client.startListening();
 
-    // Schedule tasks to receive notifications with "notice" severity.
-    // scheduler.scheduleAtFixedRate(() -> {
-    //   try {
-    //     List<Notification> retrieved =  client.getNotifications("notice");
-
-    //     System.out.println("NOTIFICATIONS RECEIVED");
-    //     retrieved.forEach(System.out::println);
-    //   } catch (IOException e) {
-    //     e.printStackTrace();
-    //   } catch (URISyntaxException e) {
-    //     e.printStackTrace();
-    //   } catch (TimeoutException e) {
-    //     e.printStackTrace();
-    //   }
-    // }, 20, 20, TimeUnit.SECONDS);
-
-
-    // Schedule tasks to receive notifications with "caution" severity.
-/*    scheduler.scheduleWithFixedDelay(() -> {
-      try {
-        List<Notification> retrieved = client.getNotifications("caution");
-
-        System.out.println("NOTIFICATIONS RECEIVED");
-        retrieved.forEach(System.out::println);
-      } catch (IOException e) {
-        e.printStackTrace();
-      } catch (URISyntaxException e) {
-        e.printStackTrace();
-      } catch (TimeoutException e) {
-        e.printStackTrace();
-      }
-    }, 15, 15, TimeUnit.SECONDS);
-*/
     while(input.hasNextLine()) {
       String line = input.nextLine();
       String[] components = line.split(" ");
@@ -161,6 +131,31 @@ public class CommandLineClient implements UrgentBroadcastListener {
   }
 
   private void startListening() throws IOException {
+    // Schedule tasks to receive notifications with "caution" severity.
+    scheduler.scheduleWithFixedDelay(() -> {
+      try {
+        List<Notification> retrieved = getNotifications("caution");
+
+        System.out.println("NOTIFICATIONS RECEIVED");
+        retrieved.forEach(System.out::println);
+      } catch (IOException | URISyntaxException | TimeoutException e) {
+        e.printStackTrace();
+      }
+    }, config.getCautionInterval(), config.getCautionInterval(), TimeUnit.MINUTES);
+
+    // Schedule tasks to receive notifications with "notice" severity.
+    scheduler.scheduleAtFixedRate(() -> {
+      try {
+        List<Notification> retrieved = getNotifications("notice");
+
+        System.out.println("NOTIFICATIONS RECEIVED");
+        retrieved.forEach(System.out::println);
+      } catch (IOException | URISyntaxException | TimeoutException e) {
+        // Do nothing. The next retrieval will get them.
+      }
+    }, config.getNoticeInterval(), config.getNoticeInterval(), TimeUnit.MINUTES);
+
+    // Join the multicast group to receive urgent notifications.
     httpClient.startListeningToBroadcast();
   }
 
@@ -168,9 +163,9 @@ public class CommandLineClient implements UrgentBroadcastListener {
     return httpClient.getId().toString();
   }
 
-  static String possibleInputs = "subscribe";
-  int timeout;
-  int retries;
+  static String possibleInputs = "subscribe <id> or retrieve <severity>";
+  ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+  Config config;
 
   HttpClient httpClient;
 }

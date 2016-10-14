@@ -8,7 +8,7 @@ import java.util.UUID;
 public class Notification {
   public String toString() {
     StringBuilder builder = new StringBuilder();
-    Format format = new SimpleDateFormat("HH::mm dd/MM/yy");
+    Format format = new SimpleDateFormat("HH:mm dd/MM/yy");
 
     builder.append("Message: ").append(message).append("\n");
     builder.append("Sender: ").append(sender).append("\n");
