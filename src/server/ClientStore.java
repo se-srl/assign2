@@ -17,13 +17,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class ClientStore {
-  public ClientStore(Config config, File file) {
-    this.config = config;
+  public ClientStore(File file) {
     this.file = file;
   }
 
-  public ClientStore(Config config) {
-    this(config, new File(config.getSubscriptionSaveFile()));
+  public ClientStore() {
+    this(new File("subscriptions.out"));
   }
 
   public void load(String filename) throws IOException {
@@ -101,16 +100,15 @@ public class ClientStore {
 
     };
 
-    scheduler.scheduleAtFixedRate(saver, config.getSaveInterval(), config.getSaveInterval(), TimeUnit.SECONDS);
+    scheduler.scheduleAtFixedRate(saver, 5, 5, TimeUnit.MINUTES);
   }
 
   public void setLastAccess(UUID subscriber, Timestamp timestamp) {
     lastAccess.put(subscriber, timestamp);
   }
 
-  private Config config;
   private File file;
-  private Gson gson;
+  private Gson gson = new Gson();
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
   private LinkedHashMap<UUID, ArrayList<UUID>> subscriptions = new LinkedHashMap<>();

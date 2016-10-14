@@ -96,6 +96,7 @@
     <!-- Compile the java code from ${src.main.dir} to ${build.main.dir}  -->
     <target name="compile" depends="clean">
         <mkdir dir="out/main" />
+        <!--<copy file="mitter.properties" tofile="out/main/mitter.properties" overwrite="true"/>-->
         <javac
                 destdir="out/main"
                 encoding="UTF-8"
@@ -110,11 +111,12 @@
     </target>
 
     <target name="run-mitter" depends="compile">
+        <!--<copy file="${config}" tofile="out/main/${config}"/>-->
         <java fork="true" classname="server.Driver">
-            <classpath refid="lib.path" />
-            <classpath location="out/main" />
             <arg value="${fetchPort}"/>
             <arg value="${broadcastPort}"/>
+            <classpath refid="lib.path" />
+            <classpath location="out/main" />
         </java>
     </target>
 

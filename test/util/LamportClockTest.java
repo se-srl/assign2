@@ -9,10 +9,10 @@ public class LamportClockTest {
   public void receivesAndUpdatesTimestamps() {
     LamportClock clock = new LamportClock();
     clock.receive(new Timestamp(7));
-    assertEquals(8, clock.getTime().getTime());
+    assertEquals(7, clock.getTime().getTime());
 
     clock.receive(new Timestamp(4));
-    assertEquals(9, clock.getTime().getTime());
+    assertEquals(7, clock.getTime().getTime());
   }
 
   @Test

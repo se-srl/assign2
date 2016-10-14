@@ -1,4 +1,49 @@
-Most of the work done so far has been the MitterServer. 
+I'm sorry this is so shit, by the way.
+
+There are some unit tests, mostly for things I wasn't convinced about. The "SillyTest" is as
+close to an integration test as happened. It doesn't have multiple servers, but you can run
+simultaneous notification servers and clients on the command line.
+
+The mitter server should be run first, as both clients immediately try to register with it.
+
+> ant run-mitter -DfetchPort=8080 -DbroadcastPort=9090
+
+The ports don't matter. The server is on localhost.
+It occasionally writes the stored notifications to file.
+
+A notification server is run by
+
+> ant run-notification-server -Dhostname=localhost -DfetchPort=8080 -DbroadcastPort=9090 -Dretries=3 -Dtimeout=1000
+
+The hostname must be localhost, and the ports must match up with those of the MitterServer, but
+the other values must be run.
+
+To send a notification, use
+
+> send
+
+This will prompt you for the contents of the notification. The system allows for editing, but
+there isn't a mechanism for doing so in this client.
+
+A client is run with
+
+> ant run-client -Dhostname=localhost -DfetchPort=8080 -DbroadcastPort=9090 -Dretries=3 -Dtimeout=1000
+
+With the same requirements as the notification server for parameters.
+
+Notifications are automatically retrieved at the given times. To retrieve notifications use
+
+> retrieve urgent
+> retrieve caution
+> retrieve notice
+
+To subscribe to a notification server, use
+
+> subscribe <uuid>
+
+------ Notes from initial submission -----
+
+Most of the work done so far has been the MitterServer.
 
 To run a stand alone MitterServer, run
 

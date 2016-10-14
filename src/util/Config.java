@@ -2,6 +2,7 @@ package util;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Properties;
 
 public class Config {
@@ -29,8 +30,10 @@ public class Config {
 
   public Config(String configFile) {
     try {
+//      final InputStream stream = this.getClass().getClassLoader().getResourceAsStream(configFile);
       properties.load(new FileReader(configFile));
     } catch (IOException e) {
+      e.printStackTrace();
       throw new RuntimeException("Failed to load config file" + configFile + ".");
     }
   }

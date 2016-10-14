@@ -19,14 +19,18 @@ import util.Retrier;
 import util.Severity;
 
 public class CommandLineNotificationServer {
-  CommandLineNotificationServer(Config config) throws IOException {
-    this(new HttpClient(config), config);
-  }
+  public CommandLineNotificationServer(HttpClient httpClient, int retries, int timeout) {
+      this.httpClient = httpClient;
+      this.retries = retries;
+      this.timeout = timeout;
 
-  public CommandLineNotificationServer(HttpClient httpClient, Config config) {
-    this.httpClient = httpClient;
-    this.config = config;
-  }
+      System.out.println("Timeout: " + timeout);
+    }
+
+  public CommandLineNotificationServer(String hostname, int serverPort, int multicastPort, int
+    retries, int timeout) throws IOException {
+      this(new HttpClient(hostname, serverPort, multicastPort), retries, timeout);
+    }
 
   class SendTask implements Callable<Notification> {
     SendTask(Future<Notification> future, Notification notification) {
@@ -37,7 +41,7 @@ public class CommandLineNotificationServer {
     @Override
     public Notification call() throws Exception {
       future = httpClient.sendNotification(notification);
-      Notification returned = future.get(config.getTimeout(), TimeUnit.MILLISECONDS);
+      Notification returned = future.get(timeout, TimeUnit.MILLISECONDS);
       if (notification != null) {
         System.out.println("Successfully sent");
         return returned;
@@ -91,7 +95,7 @@ public class CommandLineNotificationServer {
     Future<Notification> created = null;
 
     try {
-      Retrier.doWithRetries(new SendTask(created, notification), new SendFail(created,notification), config.getRetries());
+      Retrier.doWithRetries(new SendTask(created, notification), new SendFail(created,notification), retries);
     } catch (TimeoutException e) {
       System.out.println("Server problem, try again.");
     }
@@ -105,7 +109,7 @@ public class CommandLineNotificationServer {
     @Override
     public Void call() throws Exception {
       future = httpClient.register();
-      future.get(config.getTimeout(), TimeUnit.MILLISECONDS);
+      future.get(timeout, TimeUnit.MILLISECONDS);
 
       return null;
     }
@@ -120,7 +124,7 @@ public class CommandLineNotificationServer {
 
     @Override
     public Void call() throws Exception {
-      future.cancel(true);
+      if (future != null) future.cancel(true);
       return null;
     }
 
@@ -129,7 +133,7 @@ public class CommandLineNotificationServer {
 
   public void register() throws TimeoutException {
     Future<UUID> success = null;
-    Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), config.getRetries());
+    Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), retries);
   }
 
   public void setName(String senderName) {
@@ -141,8 +145,11 @@ public class CommandLineNotificationServer {
   }
 
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
-    CommandLineNotificationServer client = new CommandLineNotificationServer(new Config(args[0]));
-
+    CommandLineNotificationServer client = new CommandLineNotificationServer(args[0],
+                                                                            Integer.parseInt(args[1]),
+                                                                            Integer.parseInt(args[2]),
+                                                                            Integer.parseInt(args[3]),
+                                                                            Integer.parseInt(args[4]));
     try {
       client.register();
     } catch (TimeoutException e) {
@@ -181,7 +188,8 @@ public class CommandLineNotificationServer {
   }
 
   private static String possibleInputs = "send";
-  private Config config;
+  private int retries;
+  private int timeout;
   private String senderName;
   private HttpClient httpClient;
 }

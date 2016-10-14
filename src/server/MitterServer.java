@@ -21,6 +21,7 @@ import util.SubscriptionResult;
 
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -41,13 +42,12 @@ public class MitterServer {
    * Use an existing HttpServer.
    * @param httpServer the server to us
    */
-  public MitterServer(Config config, HttpServer httpServer, MulticastSocket multicastSocket,
-                      InetAddress
+  public MitterServer(HttpServer httpServer, MulticastSocket multicastSocket, InetAddress
                                                                               broadcastGroup) throws IOException {
     server = httpServer;
     server.setExecutor(Executors.newCachedThreadPool());
-    clientStore = new ClientStore(config);
-    notificationStore = new NotificationStore(config);
+    clientStore = new ClientStore();
+    notificationStore = new NotificationStore();
     clock = new LamportClock();
     multicast = multicastSocket;
     this.broadcastGroup = broadcastGroup;
@@ -55,11 +55,17 @@ public class MitterServer {
     multicast.joinGroup(InetAddress.getByName("224.4.4.4"));
   }
 
-  public MitterServer(Config config) throws IOException {
-    this(config, HttpServer.create(
-      new InetSocketAddress(config.getFetchHostname(), config.getFetchPort()), -1),
-      new MulticastSocket(config.getBroadcastPort()),
-                          InetAddress.getByName(config.getBroadcastHostname()));
+  /**
+   * Creates a HttpServer bound to the InetSocketAddress with the hostname and port specified.
+   * @param hostname the hostname for the server
+   * @param serverPort the port for the server
+   */
+  public MitterServer(String hostname, int serverPort, int multicastPort) throws IOException {
+    // The HttpServer constructor takes an address, and a maximum backlog. If this is < 0, the
+    // default is used.
+
+    this(HttpServer.create(new InetSocketAddress(hostname, serverPort), -1),
+    new MulticastSocket(multicastPort), InetAddress.getByName("224.4.4.4"));
   }
 
   /**
@@ -71,7 +77,6 @@ public class MitterServer {
     server.createContext("/send", new SendHandler());
     server.createContext("/register", new RegisterHandler());
 
-    notificationStore.scheduleSaves();
   }
 
   /**
@@ -325,13 +330,13 @@ public class MitterServer {
     }
   }
 
-  MulticastSocket multicast;
+  private MulticastSocket multicast;
   private InetAddress broadcastGroup;
   private int multicastPort;
 
   private LamportClock clock;
   private Gson gson = new Gson();
   private HttpServer server;
-  private NotificationStore notificationStore;
+  private NotificationStore notificationStore = new NotificationStore("notifications.out", 5);
   private ClientStore clientStore;
 }

@@ -28,23 +28,30 @@ public class NotificationStore {
    * Creates an empty store, which is not automatically written to file, unless a file is added
    * later.
    */
-  public NotificationStore(Config config) {
-    this(new File(config.getNotificationSaveFile()), config);
+  public NotificationStore() {
+    notifications.put(Severity.URGENT, new ExpiringLinkedHashMap<>(1000));
+    notifications.put(Severity.CAUTION, new ExpiringLinkedHashMap<>(500));
+    notifications.put(Severity.NOTICE, new ExpiringLinkedHashMap<>(100));
+  }
 
-    notifications.put(Severity.NOTICE, new ExpiringLinkedHashMap<>(config.getNoticeMax()));
-    notifications.put(Severity.CAUTION, new ExpiringLinkedHashMap<>(config.getCautionMax()));
-    notifications.put(Severity.URGENT, new ExpiringLinkedHashMap<>(config.getUrgentMax()));
+  /**
+   * Creates an empty store, which is automatically written to the given file at the given interval.
+   * @param fileName the name of the file to be written to
+   * @param writeInterval the duration of time between file writes, given in seconds.
+   */
+  public NotificationStore(String fileName, int writeInterval) {
+    this(new File(fileName), writeInterval);
   }
 
   /**
    * Creates an empty store which is automatically written to the given file at the given interval.
    * @param file the file to be written to
    */
-  NotificationStore(File file, Config config) {
+  NotificationStore(File file, int writeInterval) {
     this.file = file;
-    this.config = config;
 
     gson = new Gson();
+    this.writeInterval = writeInterval;
   }
 
   public void load(String filename) throws FileNotFoundException {
@@ -74,10 +81,10 @@ public class NotificationStore {
    */
   public ArrayList<Notification> get(Severity severity, UUID subscription, Timestamp since) {
     return new ArrayList<>(notifications.get(severity).values().stream()
-                               .filter(note -> note.senderId.equals(subscription))
-                               .filter(note -> since == null ||
-                                               note.logicalTimestamp.compareTo(since) == 1)
-                               .collect(Collectors.toList()));
+                           .filter(note -> note.senderId.equals(subscription))
+                           .filter(note -> since == null ||
+                                           note.logicalTimestamp.compareTo(since) == 1)
+                           .collect(Collectors.toList()));
   }
 
   /**
@@ -101,36 +108,27 @@ public class NotificationStore {
 
   public void scheduleSaves() {
     final Runnable saver = () -> {
-      // Do saving things. Only save things that haven't been saved before. This will probably
-      // involve appending the JSON of each notification since the last write.
       try {
-        FileWriter fw = new FileWriter(file);
-        gson.toJson(notifications, fw);
+        gson.toJson(notifications, new FileWriter(file));
       } catch (IOException e) {
-        // Don't stress too much, it will be written over in writeInterval seconds anyway.
+        // Do nothing because it will be rerun soon anyway.
       }
-
     };
 
-    scheduler.scheduleAtFixedRate(saver, config.getSaveInterval(), config.getSaveInterval(), TimeUnit.SECONDS);
+    scheduler.scheduleAtFixedRate(saver, writeInterval, writeInterval, TimeUnit.MINUTES);
   }
 
   protected File getFile() {
     return file;
   }
 
-  private Config config;
   private Gson gson;
+  private int writeInterval;
   private File file;
 
-  /*
-   * It may seem strange to store the notifications by their severity, as whenever a user
-   * requires notifications, they always search by the notification creator. However, a regular
-   * task that occurs involves removing notifications when there are too many. This is done by
-   * severity.
-   */
   private HashMap<Severity, ExpiringLinkedHashMap<UUID, Notification>> notifications =
-    new HashMap<>();
+  new HashMap<>();
+
 
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 }

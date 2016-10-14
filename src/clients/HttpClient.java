@@ -2,13 +2,19 @@ package clients;
 
 import com.google.gson.Gson;
 
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.fluent.Request;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.ContentType;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -18,14 +24,18 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.jar.Pack200;
 
-import util.Config;
 import util.CreatedNotification;
 import util.LamportClock;
 import util.Notification;
+import util.NotificationStore;
 import util.Registration;
 import util.RetrievalResult;
+import util.Severity;
 import util.SubscriptionResult;
+import util.Timestamp;
 
 /**
  * A client for a MitterServer.
@@ -34,21 +44,12 @@ import util.SubscriptionResult;
  * receivers. Nor does this client. It is intended to be used within other classes.
  */
 public class HttpClient {
-  public HttpClient(Config config) throws IOException {
-    this.config = config;
-    this.requestRoot = "http://" + config.getFetchHostname() + ":" + Integer.toString(config.getFetchPort());
+  public HttpClient(String hostname, int serverPort, int multicastPort) throws IOException {
+    this.requestRoot = "http://" + hostname + ":" + Integer.toString(serverPort);
     this.executor = Executors.newCachedThreadPool();
     this.listeners = new ArrayList<>();
-    this.multicastSocket = new MulticastSocket(config.getBroadcastPort());
-    multicastSocket.joinGroup(InetAddress.getByName(config.getBroadcastHostname()));
-  }
-
-  void setExecutor(ExecutorService exectuor) {
-    this.executor = exectuor;
-  }
-
-  void setClock(LamportClock clock) {
-    this.clock = clock;
+    this.multicastSocket = new MulticastSocket(multicastPort);
+    multicastSocket.joinGroup(InetAddress.getByName("224.4.4.4"));
   }
 
   public Future<UUID> register() throws IOException {
@@ -76,7 +77,7 @@ public class HttpClient {
     clock.send();
 
     Request request =  Request.Post(requestRoot + "/send").bodyString(gson.toJson(notification),
-      ContentType.APPLICATION_JSON);
+    ContentType.APPLICATION_JSON);
 
     return executor.submit(() -> {
       String result = request.execute().returnContent().asString();
@@ -132,8 +133,8 @@ public class HttpClient {
     executor.submit(() -> {
       while (true) {
         // 1500 is the MTU.
-        byte[] buffer = new byte[config.getMTU()];
-        DatagramPacket packet = new DatagramPacket(buffer, config.getMTU());
+        byte[] buffer = new byte[1500];
+        DatagramPacket packet = new DatagramPacket(buffer, 1500);
         multicastSocket.receive(packet);
         String jsonString = new String(buffer, 0, packet.getLength());
 
@@ -149,7 +150,6 @@ public class HttpClient {
     return id;
   }
 
-  private Config config;
   private Gson gson = new Gson();
   private UUID id;
   private String requestRoot;

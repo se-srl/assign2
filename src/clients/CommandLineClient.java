@@ -8,27 +8,30 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import util.Config;
 import util.Notification;
 import util.Retrier;
 
 public class CommandLineClient implements UrgentBroadcastListener {
-  public CommandLineClient(Config config) throws IOException {
-    this(new HttpClient(config), config);
-  }
-
-  public CommandLineClient(HttpClient httpClient, Config config) {
+  public CommandLineClient(HttpClient httpClient, int retries, int timeout) {
     this.httpClient = httpClient;
-    this.config = config;
+    this.retries = retries;
+    this.timeout = timeout;
+
     httpClient.addListener(this);
   }
+
+  public CommandLineClient(String hostname, int serverPort, int multicastPort, int retries,
+                           int timeout) throws IOException {
+    this(new HttpClient(hostname, serverPort, multicastPort), retries, timeout);
+  }
+
+
 
   @Override
   public void urgentNotificationReceived(Notification notification) {
@@ -45,7 +48,7 @@ public class CommandLineClient implements UrgentBroadcastListener {
     @Override
     public List<UUID> call() throws Exception {
       future = httpClient.subscribe(UUID.fromString(subscribee));
-      List<UUID> subscriptions = future.get(config.getTimeout(), TimeUnit .MILLISECONDS);
+      List<UUID> subscriptions = future.get(timeout, TimeUnit .MILLISECONDS);
       if (subscriptions.contains(UUID.fromString(subscribee))) {
         System.out.println("Subscribed!");
         return subscriptions;
@@ -75,7 +78,8 @@ public class CommandLineClient implements UrgentBroadcastListener {
     Future<List<UUID>> futureSubscriptions = null;
 
 
-    Retrier.doWithRetries(new SubscribeTask(futureSubscriptions, subscribee), new SubscribeFail(futureSubscriptions), config.getRetries());
+    Retrier.doWithRetries(new SubscribeTask(futureSubscriptions, subscribee),
+        new SubscribeFail(futureSubscriptions), retries);
   }
 
   class GetTask implements Callable<Void> {
@@ -88,7 +92,7 @@ public class CommandLineClient implements UrgentBroadcastListener {
     public Void call() throws Exception {
       future = httpClient.retrieve(severity);
 
-      List<Notification> notifications = future.get(config.getTimeout(), TimeUnit .MILLISECONDS);
+      List<Notification> notifications = future.get(timeout, TimeUnit .MILLISECONDS);
       System.out.print(notifications);
       return null;
     }
@@ -116,7 +120,8 @@ public class CommandLineClient implements UrgentBroadcastListener {
     // TODO handle the IO Exceptions and URISyntaxException (Also fix main).
     Future<List<Notification>> futureNotifications = httpClient.retrieve(severity);
 
-    Retrier.doWithRetries(new GetTask(futureNotifications, severity), new GetFail(futureNotifications), config.getRetries());
+    Retrier.doWithRetries(new GetTask(futureNotifications, severity),
+        new GetFail(futureNotifications), retries);
   }
 
   private class RegisterTask implements Callable<Void> {
@@ -127,7 +132,7 @@ public class CommandLineClient implements UrgentBroadcastListener {
     @Override
     public Void call() throws Exception {
       future = httpClient.register();
-      future.get(config.getTimeout(), TimeUnit.MILLISECONDS);
+      future.get(timeout, TimeUnit.MILLISECONDS);
 
       return null;
     }
@@ -151,11 +156,12 @@ public class CommandLineClient implements UrgentBroadcastListener {
 
   public void register() throws TimeoutException {
     Future<UUID> success = null;
-    Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), config.getRetries());
+    Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), retries);
   }
 
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
-    CommandLineClient client = new CommandLineClient(new Config(args[0]));
+    CommandLineClient client = new CommandLineClient(args[0], Integer.parseInt(args[1]), Integer
+                                                                                         .parseInt(args[2]), Integer.parseInt(args[3]), Integer.parseInt(args[4]));
 
     try {
       client.register();
@@ -175,13 +181,17 @@ public class CommandLineClient implements UrgentBroadcastListener {
       String[] components = line.split(" ");
       switch (components[0]) {
         case "subscribe":
-          client.subscribe(components[1]);
+          if (components[1] == null) {
+            System.out.println("Expecting a UUID");
+          } else {
+            client.subscribe(components[1]);
+          }
           break;
         case "retrieve":
-          try {
+          if (components[1] == null) {
+            System.out.println("Expecting a severity: caution, notice, urgent");
+          } else {
             client.getNotifications(components[1]);
-          } catch (TimeoutException timeout) {
-            System.out.println("Connection problem. Try again");
           }
           break;
         default:
@@ -200,7 +210,7 @@ public class CommandLineClient implements UrgentBroadcastListener {
       } catch (IOException | URISyntaxException | TimeoutException e) {
         e.printStackTrace();
       }
-    }, config.getCautionInterval(), config.getCautionInterval(), TimeUnit.MINUTES);
+    }, 1, 1, TimeUnit.MINUTES);
 
     // Schedule tasks to receive notifications with "notice" severity.
     scheduler.scheduleAtFixedRate(() -> {
@@ -210,7 +220,7 @@ public class CommandLineClient implements UrgentBroadcastListener {
       } catch (IOException | URISyntaxException | TimeoutException e) {
         // Do nothing. The next retrieval will get them.
       }
-    }, config.getNoticeInterval(), config.getNoticeInterval(), TimeUnit.MINUTES);
+    }, 30, 30, TimeUnit.MINUTES);
 
     // Join the multicast group to receive urgent notifications.
     httpClient.startListeningToBroadcast();
@@ -222,7 +232,9 @@ public class CommandLineClient implements UrgentBroadcastListener {
 
   static String possibleInputs = "subscribe <id> or retrieve <severity>";
   ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-  Config config;
+  int timeout;
+  int retries;
+
 
   HttpClient httpClient;
 }
