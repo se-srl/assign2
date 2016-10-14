@@ -49,7 +49,7 @@ public class CommandLineNotificationServer {
     Notification notification;
   }
 
-  private class SendFail implements Callable<Void> {
+  class SendFail implements Callable<Void> {
     SendFail(Future<Notification> future, Notification notification) {
       this.future = future;
       this.notification = notification;
@@ -97,7 +97,7 @@ public class CommandLineNotificationServer {
     }
   }
 
-  private class RegisterTask implements Callable<Void> {
+  class RegisterTask implements Callable<Void> {
     RegisterTask(Future<UUID> future) {
       this.future = future;
     }
@@ -113,7 +113,7 @@ public class CommandLineNotificationServer {
     Future<UUID> future;
   }
 
-  private class RegisterFail implements Callable<Void> {
+  class RegisterFail implements Callable<Void> {
     RegisterFail(Future<UUID> future) {
       this.future = future;
     }
@@ -127,14 +127,9 @@ public class CommandLineNotificationServer {
     Future<UUID> future;
   }
 
-  public void register() {
+  public void register() throws TimeoutException {
     Future<UUID> success = null;
-
-    try {
-      Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), config.getRetries());
-    } catch (TimeoutException e) {
-      System.err.println("Server problem, try again.");
-    }
+    Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), config.getRetries());
   }
 
   public void setName(String senderName) {
@@ -147,7 +142,13 @@ public class CommandLineNotificationServer {
 
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
     CommandLineNotificationServer client = new CommandLineNotificationServer(new Config(args[0]));
-    client.register();
+
+    try {
+      client.register();
+    } catch (TimeoutException e) {
+      System.err.println("System error. Try again later");
+      System.exit(1);
+    }
 
     Scanner input = new Scanner(System.in);
 

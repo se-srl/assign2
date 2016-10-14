@@ -1,10 +1,13 @@
 package clients;
 
+import org.mockito.internal.matchers.Not;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -14,6 +17,7 @@ import java.util.concurrent.TimeoutException;
 
 import util.Config;
 import util.Notification;
+import util.Retrier;
 
 public class CommandLineClient implements UrgentBroadcastListener {
   public CommandLineClient(Config config) throws IOException {
@@ -32,68 +36,122 @@ public class CommandLineClient implements UrgentBroadcastListener {
     System.out.println(notification.toString());
   }
 
-  public List<Notification> getNotifications(String severity)
+  class SubscribeTask implements Callable<List<UUID>> {
+    SubscribeTask(Future<List<UUID>> future, String subscribee) {
+      this.future = future;
+      this.subscribee = subscribee;
+    }
+
+    @Override
+    public List<UUID> call() throws Exception {
+      future = httpClient.subscribe(UUID.fromString(subscribee));
+      List<UUID> subscriptions = future.get(config.getTimeout(), TimeUnit .MILLISECONDS);
+      if (subscriptions.contains(UUID.fromString(subscribee))) {
+        System.out.println("Subscribed!");
+        return subscriptions;
+      }
+      throw new Exception();
+    }
+
+    Future<List<UUID>> future;
+    String subscribee;
+  }
+
+  class SubscribeFail implements Callable<Void> {
+    SubscribeFail(Future<List<UUID>> future) {
+      this.future = future;
+    }
+
+    @Override
+    public Void call() throws Exception {
+      future.cancel(true);
+      return null;
+    }
+
+    Future<List<UUID>> future;
+  }
+
+  public void subscribe(String subscribee) throws TimeoutException {
+    Future<List<UUID>> futureSubscriptions = null;
+
+
+    Retrier.doWithRetries(new SubscribeTask(futureSubscriptions, subscribee), new SubscribeFail(futureSubscriptions), config.getRetries());
+  }
+
+  class GetTask implements Callable<Void> {
+    GetTask(Future<List<Notification>> future, String severity) {
+      this.future = future;
+      this.severity = severity;
+    }
+
+    @Override
+    public Void call() throws Exception {
+      future = httpClient.retrieve(severity);
+
+      List<Notification> notifications = future.get(config.getTimeout(), TimeUnit .MILLISECONDS);
+      System.out.print(notifications);
+      return null;
+    }
+
+    Future<List<Notification>> future;
+    String severity;
+  }
+
+  class GetFail implements Callable<Void> {
+    GetFail(Future<List<Notification>> future) {
+      this.future = future;
+    }
+
+    @Override
+    public Void call() throws Exception {
+      future.cancel(true);
+      return null;
+    }
+
+    Future<List<Notification>> future;
+  }
+
+  public void getNotifications(String severity)
       throws IOException, URISyntaxException, TimeoutException {
     // TODO handle the IO Exceptions and URISyntaxException (Also fix main).
     Future<List<Notification>> futureNotifications = httpClient.retrieve(severity);
 
-    for (int i = 0; i < config.getRetries(); i++) {
-      try {
-        return futureNotifications.get(config.getTimeout(), TimeUnit.MILLISECONDS);
-      } catch (InterruptedException | ExecutionException | TimeoutException exception) {
-        futureNotifications.cancel(true);
-        futureNotifications = httpClient.retrieve(severity);
-      }
-    }
-
-    futureNotifications.cancel(true);
-    throw new TimeoutException("Server didn't respond in time.");
+    Retrier.doWithRetries(new GetTask(futureNotifications, severity), new GetFail(futureNotifications), config.getRetries());
   }
 
-  public boolean subscribe(String subscribee) throws TimeoutException {
-    Future<List<UUID>> futureSubscriptions = null;
-
-
-    for (int i = 0; i < config.getRetries(); i++) {
-      try {
-        futureSubscriptions = httpClient.subscribe(UUID.fromString(subscribee));
-        if (futureSubscriptions.get(config.getTimeout(), TimeUnit.MILLISECONDS).contains(UUID.fromString
-                                                                                              (subscribee))) {
-          System.out.println("Subscribed!");
-          return true;
-        }
-      } catch (InterruptedException | ExecutionException | TimeoutException e) {
-        futureSubscriptions.cancel(true);
-        // It seems like there are unhandled exceptions here, but it will have been caught the
-        // first time the request was sent, and handled below.
-        try {
-          futureSubscriptions = httpClient.subscribe(UUID.fromString(subscribee));
-        } catch (URISyntaxException | IOException e1) {
-          // Do nothing, because this will literally never happen.
-        }
-      } catch (IOException | URISyntaxException e) {
-        throw new RuntimeException("Unexpected error. Try again");
-      }
+  private class RegisterTask implements Callable<Void> {
+    RegisterTask(Future<UUID> future) {
+      this.future = future;
     }
-    throw new TimeoutException("Server didn't respond in time, try again.");
+
+    @Override
+    public Void call() throws Exception {
+      future = httpClient.register();
+      future.get(config.getTimeout(), TimeUnit.MILLISECONDS);
+
+      return null;
+    }
+
+    Future<UUID> future;
   }
 
-  public void register() throws TimeoutException, IOException {
+  private class RegisterFail implements Callable<Void> {
+    RegisterFail(Future<UUID> future) {
+      this.future = future;
+    }
+
+    @Override
+    public Void call() throws Exception {
+      future.cancel(true);
+      return null;
+    }
+
+    Future<UUID> future;
+  }
+
+  public void register() throws TimeoutException {
     Future<UUID> success = null;
-
-    for (int i = 0; i < config.getRetries(); i++) {
-      try {
-        success = httpClient.register();
-        success.get(config.getTimeout(), TimeUnit.MILLISECONDS);
-        return;
-      } catch (InterruptedException | ExecutionException | TimeoutException exception) {
-        success.cancel(true);
-        success = httpClient.register();
-      }
-    }
-
-    success.cancel(true);
-    throw new TimeoutException("Server didn't respond in time. Try again.");
+    Retrier.doWithRetries(new RegisterTask(success), new RegisterFail(success), config.getRetries());
   }
 
   public static void main(String[] args) throws TimeoutException, IOException, URISyntaxException {
@@ -101,7 +159,7 @@ public class CommandLineClient implements UrgentBroadcastListener {
 
     try {
       client.register();
-    } catch (IOException | TimeoutException e) {
+    } catch (TimeoutException e) {
       System.err.println("System error. Try again later");
       System.exit(1);
     }
@@ -120,8 +178,11 @@ public class CommandLineClient implements UrgentBroadcastListener {
           client.subscribe(components[1]);
           break;
         case "retrieve":
-          List<Notification> notifications = client.getNotifications(components[1]);
-          System.out.println(notifications);
+          try {
+            client.getNotifications(components[1]);
+          } catch (TimeoutException timeout) {
+            System.out.println("Connection problem. Try again");
+          }
           break;
         default:
           System.out.println("Not sure what you mean. Try " + possibleInputs);
@@ -134,10 +195,8 @@ public class CommandLineClient implements UrgentBroadcastListener {
     // Schedule tasks to receive notifications with "caution" severity.
     scheduler.scheduleWithFixedDelay(() -> {
       try {
-        List<Notification> retrieved = getNotifications("caution");
-
-        System.out.println("NOTIFICATIONS RECEIVED");
-        retrieved.forEach(System.out::println);
+        System.out.println("Retrieving notifications:");
+        getNotifications("caution");
       } catch (IOException | URISyntaxException | TimeoutException e) {
         e.printStackTrace();
       }
@@ -146,10 +205,8 @@ public class CommandLineClient implements UrgentBroadcastListener {
     // Schedule tasks to receive notifications with "notice" severity.
     scheduler.scheduleAtFixedRate(() -> {
       try {
-        List<Notification> retrieved = getNotifications("notice");
-
-        System.out.println("NOTIFICATIONS RECEIVED");
-        retrieved.forEach(System.out::println);
+        System.out.println("Retrieving notifications:");
+        getNotifications("notice");
       } catch (IOException | URISyntaxException | TimeoutException e) {
         // Do nothing. The next retrieval will get them.
       }
